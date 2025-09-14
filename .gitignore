@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.python-version
+.venv/
+.env
+
+# Build & dist
+build/
+dist/
+*.egg-info/
+
+# Data & artifacts
+data/
+*.parquet
+*.csv
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Coverage
+htmlcov/
+.coverage
+
+# VSCode / IDE
+.vscode/
+.idea/
+
+# Virtual environments
+.venv

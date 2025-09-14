@@ -55,7 +55,12 @@ warn_return_any = true
 warn_unused_ignores = true
 disallow_untyped_defs = false
 pretty = true
+packages = ["optiback"]
+exclude = "(^\\.venv/|^venv/|^build/|^dist/|^data/|/site-packages/)"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra -q --strict-markers"
+
+[project.scripts]
+optiback = "optiback.cli.optiback:main"
