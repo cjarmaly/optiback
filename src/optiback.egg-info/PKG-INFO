@@ -1,0 +1,25 @@
+Metadata-Version: 2.4
+Name: optiback
+Version: 0.1.0
+Summary: Options pricing and backtesting engine (Black–Scholes, Binomial, MC) with Greeks and realistic costs.
+Author: Christian Armaly
+License: MIT
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: numpy>=1.26
+Requires-Dist: scipy>=1.11
+Requires-Dist: pandas>=2.2
+Requires-Dist: numba>=0.59
+Requires-Dist: matplotlib>=3.8
+Requires-Dist: typer[all]>=0.12
+Requires-Dist: rich>=13.7
+Requires-Dist: pyarrow>=16.0
+Requires-Dist: yfinance>=0.2.40
+Provides-Extra: dev
+Requires-Dist: pytest>=8.2; extra == "dev"
+Requires-Dist: pytest-cov>=5.0; extra == "dev"
+Requires-Dist: hypothesis>=6.104; extra == "dev"
+Requires-Dist: black>=24.4; extra == "dev"
+Requires-Dist: ruff>=0.6; extra == "dev"
+Requires-Dist: mypy>=1.10; extra == "dev"
+Requires-Dist: pre-commit>=3.7; extra == "dev"
