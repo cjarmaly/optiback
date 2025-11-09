@@ -33,36 +33,44 @@ def black_scholes_call(
         >>> round(price, 4)
         6.8887
     """
-    spot = np.asarray(spot)
-    strike = np.asarray(strike)
+    # Check if inputs are scalar before converting to arrays
+    is_scalar = np.isscalar(spot) and np.isscalar(strike)
+
+    spot_arr = np.asarray(spot, dtype=np.float64)
+    strike_arr = np.asarray(strike, dtype=np.float64)
 
     # Handle edge cases
     if time_to_expiry <= 0:
-        return np.maximum(spot - strike, 0.0)
+        result = np.maximum(spot_arr - strike_arr, 0.0)
+        if is_scalar:
+            return float(result.item())
+        return result
     if vol <= 0:
-        return np.maximum(
-            spot * np.exp(-dividend_yield * time_to_expiry)
-            - strike * np.exp(-rate * time_to_expiry),
+        result = np.maximum(
+            spot_arr * np.exp(-dividend_yield * time_to_expiry)
+            - strike_arr * np.exp(-rate * time_to_expiry),
             0.0,
         )
+        if is_scalar:
+            return float(result.item())
+        return result  # type: ignore[no-any-return]
 
     # Black-Scholes formula
-    d1 = (np.log(spot / strike) + (rate - dividend_yield + 0.5 * vol**2) * time_to_expiry) / (
+    d1 = (np.log(spot_arr / strike_arr) + (rate - dividend_yield + 0.5 * vol**2) * time_to_expiry) / (
         vol * np.sqrt(time_to_expiry)
     )
 
     d2 = d1 - vol * np.sqrt(time_to_expiry)
 
     # Calculate call price
-    call_price = spot * np.exp(-dividend_yield * time_to_expiry) * norm.cdf(d1) - strike * np.exp(
+    call_price = spot_arr * np.exp(-dividend_yield * time_to_expiry) * norm.cdf(d1) - strike_arr * np.exp(
         -rate * time_to_expiry
     ) * norm.cdf(d2)
 
     # Return scalar if inputs were scalar
-    if isinstance(spot, (int, float)) and isinstance(strike, (int, float)):
-        return float(call_price)
-
-    return call_price
+    if is_scalar:
+        return float(call_price.item())
+    return call_price  # type: ignore[no-any-return]
 
 
 def black_scholes_put(
@@ -92,6 +100,9 @@ def black_scholes_put(
         >>> round(price, 4)
         5.8164
     """
+    # Check if inputs are scalar before converting to arrays
+    is_scalar = np.isscalar(spot) and np.isscalar(strike)
+
     # Use put-call parity: Put = Call - Spot*e^(-qT) + Strike*e^(-rT)
     call_price = black_scholes_call(
         spot=spot,
@@ -102,17 +113,19 @@ def black_scholes_put(
         dividend_yield=dividend_yield,
     )
 
-    spot = np.asarray(spot)
-    strike = np.asarray(strike)
+    spot_arr = np.asarray(spot, dtype=np.float64)
+    strike_arr = np.asarray(strike, dtype=np.float64)
+    
+    # Convert call_price to array for consistent computation
+    call_price_arr = np.asarray(call_price, dtype=np.float64)
 
     put_price = (
-        call_price
-        - spot * np.exp(-dividend_yield * time_to_expiry)
-        + strike * np.exp(-rate * time_to_expiry)
+        call_price_arr
+        - spot_arr * np.exp(-dividend_yield * time_to_expiry)
+        + strike_arr * np.exp(-rate * time_to_expiry)
     )
 
     # Return scalar if inputs were scalar
-    if isinstance(spot, (int, float)) and isinstance(strike, (int, float)):
-        return float(put_price)
-
-    return put_price
+    if is_scalar:
+        return float(put_price.item())
+    return put_price  # type: ignore[no-any-return]
