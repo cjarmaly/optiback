@@ -1,3 +1,4 @@
+README.md
 pyproject.toml
 setup.cfg
 src/optiback/__init__.py
@@ -9,3 +10,6 @@ src/optiback.egg-info/requires.txt
 src/optiback.egg-info/top_level.txt
 src/optiback/cli/__init__.py
 src/optiback/cli/optiback.py
+src/optiback/pricing/__init__.py
+src/optiback/pricing/black_scholes.py
+tests/test_smoke.py

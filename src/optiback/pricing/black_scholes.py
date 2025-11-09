@@ -40,21 +40,23 @@ def black_scholes_call(
     if time_to_expiry <= 0:
         return np.maximum(spot - strike, 0.0)
     if vol <= 0:
-        return np.maximum(spot * np.exp(-dividend_yield * time_to_expiry) - strike * np.exp(-rate * time_to_expiry), 0.0)
+        return np.maximum(
+            spot * np.exp(-dividend_yield * time_to_expiry)
+            - strike * np.exp(-rate * time_to_expiry),
+            0.0,
+        )
 
     # Black-Scholes formula
-    d1 = (
-        np.log(spot / strike)
-        + (rate - dividend_yield + 0.5 * vol**2) * time_to_expiry
-    ) / (vol * np.sqrt(time_to_expiry))
+    d1 = (np.log(spot / strike) + (rate - dividend_yield + 0.5 * vol**2) * time_to_expiry) / (
+        vol * np.sqrt(time_to_expiry)
+    )
 
     d2 = d1 - vol * np.sqrt(time_to_expiry)
 
     # Calculate call price
-    call_price = (
-        spot * np.exp(-dividend_yield * time_to_expiry) * norm.cdf(d1)
-        - strike * np.exp(-rate * time_to_expiry) * norm.cdf(d2)
-    )
+    call_price = spot * np.exp(-dividend_yield * time_to_expiry) * norm.cdf(d1) - strike * np.exp(
+        -rate * time_to_expiry
+    ) * norm.cdf(d2)
 
     # Return scalar if inputs were scalar
     if isinstance(spot, (int, float)) and isinstance(strike, (int, float)):
@@ -114,4 +116,3 @@ def black_scholes_put(
         return float(put_price)
 
     return put_price
-

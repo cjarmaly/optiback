@@ -39,8 +39,8 @@ target-version = ["py312"]
 
 [tool.ruff]
 line-length = 100
-select = ["E","F","I","UP","B","C90"]  # pycodestyle, pyflakes, isort, pyupgrade, bugbear, complexity
-ignore = ["E501"]                       # we let Black handle wrapping
+lint.select = ["E","F","I","UP","B","C90"]  # pycodestyle, pyflakes, isort, pyupgrade, bugbear, complexity
+lint.ignore = ["E501"]                       # we let Black handle wrapping
 src = ["src"]
 
 [tool.ruff.lint.isort]
