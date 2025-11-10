@@ -11,7 +11,7 @@ requires-python = ">=3.11"
 authors = [{ name = "Christian Armaly" }]
 license = { text = "MIT" }
 dependencies = [
-  "numpy>=1.26",
+  "numpy>=1.26,<2.3",  # Pin to avoid scipy compatibility issues with numpy 2.3.x
   "scipy>=1.11",
   "pandas>=2.2",
   "numba>=0.59",
@@ -61,6 +61,10 @@ exclude = "(^\\.venv/|^venv/|^build/|^dist/|^data/|/site-packages/)"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra -q --strict-markers"
+filterwarnings = [
+    "ignore::UserWarning",
+    "ignore::DeprecationWarning",
+]
 
 [project.scripts]
 optiback = "optiback.cli.optiback:main"

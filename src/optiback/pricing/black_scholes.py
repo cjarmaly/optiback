@@ -31,7 +31,7 @@ def black_scholes_call(
     Examples:
         >>> price = black_scholes_call(spot=100.0, strike=100.0, rate=0.02, vol=0.25, time_to_expiry=0.5)
         >>> round(price, 4)
-        6.8887
+        7.5168
     """
     # Check if inputs are scalar before converting to arrays
     is_scalar = np.isscalar(spot) and np.isscalar(strike)
@@ -98,7 +98,7 @@ def black_scholes_put(
     Examples:
         >>> price = black_scholes_put(spot=100.0, strike=100.0, rate=0.02, vol=0.25, time_to_expiry=0.5)
         >>> round(price, 4)
-        5.8164
+        6.5218
     """
     # Check if inputs are scalar before converting to arrays
     is_scalar = np.isscalar(spot) and np.isscalar(strike)

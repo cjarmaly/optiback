@@ -12,6 +12,16 @@ build/
 dist/
 *.egg-info/
 
+# Testing & Coverage
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.coverage.*
+
+# Linting & Formatting
+.ruff_cache/
+
 # Data & artifacts
 data/
 *.parquet
@@ -19,10 +29,6 @@ data/
 
 # Jupyter
 .ipynb_checkpoints/
-
-# Coverage
-htmlcov/
-.coverage
 
 # VSCode / IDE
 .vscode/

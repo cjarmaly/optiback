@@ -5,10 +5,55 @@ Options pricing & backtesting engine:
 - Greeks & implied vol
 - Backtests: delta-hedge, mispricing with realistic costs
 
-## Quickstart
+## Prerequisites
+
+- **Python 3.11 or higher** (Python 3.12 recommended)
+- **pip** (usually included with Python)
+- **Git** (to clone the repository)
+
+### Installing Python 3.11+
+
+**macOS (Homebrew):**
 ```bash
-python -m venv .venv && source .venv/bin/activate
+brew install python@3.12
+# Or
+brew install python@3.11
+```
+
+**Linux (Ubuntu/Debian):**
+```bash
+sudo apt update
+sudo apt install python3.12 python3.12-venv python3.12-dev
+# Or python3.11
+```
+
+**Windows:**
+- Download from https://www.python.org/downloads/
+- Or use: `winget install Python.Python.3.12`
+
+Verify your Python version:
+```bash
+python3 --version  # Should show 3.11.x or 3.12.x
+```
+
+## Quickstart
+
+```bash
+# 1. Clone the repository
+git clone <repository-url>
+cd optiback-1
+
+# 2. Create virtual environment with Python 3.11+
+python3.12 -m venv .venv  # Or python3.11, or python3 if it's 3.11+
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# 3. Upgrade pip
+pip install --upgrade pip setuptools wheel
+
+# 4. Install the package
 pip install -e ".[dev]"
+
+# 5. Verify installation
 optiback version
 pytest
 ```
@@ -23,18 +68,54 @@ Core goals:
 - Ergonomic CLI for quick experiments; Python API for notebooks and research
 
 ## Installation
-Requires Python >= 3.11.
+
+### For Development (Recommended)
+
+If you're contributing or want to run tests:
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install optiback
-```
+# Create virtual environment
+python3.12 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
-For development (recommended if contributing):
+# Upgrade pip
+pip install --upgrade pip setuptools wheel
 
-```bash
+# Install in editable mode with dev dependencies
 pip install -e ".[dev]"
 ```
+
+This installs:
+- The package in editable mode (code changes reflected immediately)
+- All runtime dependencies (numpy, scipy, pandas, etc.)
+- Development tools (pytest, black, ruff, mypy, etc.)
+
+### For Use Only
+
+If you just want to use the package:
+
+```bash
+# Create virtual environment
+python3.12 -m venv .venv
+source .venv/bin/activate
+
+# Install the package
+pip install -e .
+```
+
+### Troubleshooting
+
+**Python version error:**
+- Ensure you have Python 3.11 or higher installed
+- Use `python3.12 -m venv .venv` to explicitly specify the version
+
+**ModuleNotFoundError:**
+- Make sure you've run `pip install -e .` or `pip install -e ".[dev]"`
+- Verify you're in the virtual environment: `which python` should show `.venv/bin/python`
+
+**Scipy/NumPy compatibility issues:**
+- The project pins numpy to `<2.3` to avoid compatibility issues
+- If you encounter errors, reinstall: `pip install "numpy>=1.26,<2.3" --upgrade`
 
 ## CLI usage
 The CLI is provided via the `optiback` entrypoint.
@@ -65,9 +146,9 @@ The initial public API is under active development. Early access will include:
 Example (subject to change as the API stabilizes):
 
 ```python
-from optiback import pricing
+from optiback import black_scholes_call
 
-price = pricing.black_scholes_call(
+price = black_scholes_call(
     spot=100.0,
     strike=100.0,
     rate=0.02,
@@ -75,6 +156,7 @@ price = pricing.black_scholes_call(
     time_to_expiry=0.5,
     dividend_yield=0.0,
 )
+print(f"Option price: {price:.4f}")  # Output: Option price: 7.5168
 ```
 
 ## Data
