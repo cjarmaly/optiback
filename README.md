@@ -124,13 +124,54 @@ The CLI is provided via the `optiback` entrypoint.
 optiback --help
 ```
 
-Available commands today:
+### Available commands
 
 - `optiback version` — print the installed version.
+- `optiback price` — price options using Black–Scholes model
 
-Planned CLI commands (roadmap):
+### Price command
 
-- `optiback price ...` — price options using Black–Scholes, Binomial, or Monte Carlo
+Price European call or put options using the Black–Scholes model:
+
+```bash
+# Price a call option
+optiback price --spot 100 --strike 100 --rate 0.02 --vol 0.25 --time 0.5 --type call
+
+# Price a put option
+optiback price --spot 100 --strike 100 --rate 0.02 --vol 0.25 --time 0.5 --type put
+
+# Price with dividend yield
+optiback price --spot 100 --strike 100 --rate 0.02 --vol 0.25 --time 0.5 --type call --dividend 0.01
+```
+
+**Parameters:**
+- `--spot` (required): Current spot price of the underlying asset
+- `--strike` (required): Strike price of the option
+- `--rate` (required): Risk-free interest rate (annualized, as decimal, e.g., 0.02 for 2%)
+- `--vol` (required): Volatility of the underlying asset (annualized, as decimal, e.g., 0.25 for 25%)
+- `--time` (required): Time to expiration in years (e.g., 0.5 for 6 months)
+- `--type` (required): Option type: `call` or `put`
+- `--dividend` (optional): Dividend yield (annualized, as decimal, default: 0.0)
+
+**Example output:**
+```
+     Option Pricing Results      
+┏━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┓
+┃ Parameter      ┃        Value ┃
+┡━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━┩
+│ Option Type    │         Call │
+│ Spot Price     │       100.00 │
+│ Strike Price   │       100.00 │
+│ Risk-Free Rate │        2.00% │
+│ Volatility     │       25.00% │
+│ Time to Expiry │ 0.5000 years │
+│                │              │
+│ Option Price   │       7.5168 │
+└────────────────┴──────────────┘
+```
+
+### Planned CLI commands (roadmap)
+
 - `optiback greeks ...` — compute Greeks for a contract/spec
 - `optiback iv ...` — compute implied volatility
 - `optiback backtest ...` — run delta-hedge and mispricing strategies
