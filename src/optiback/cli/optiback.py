@@ -6,7 +6,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from optiback.pricing import black_scholes_call, black_scholes_put, black_scholes_greeks
+from optiback.pricing import black_scholes_call, black_scholes_greeks, black_scholes_put
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 console = Console()
