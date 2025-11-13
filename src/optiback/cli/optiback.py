@@ -6,7 +6,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from optiback.pricing import black_scholes_call, black_scholes_put
+from optiback.pricing import black_scholes_call, black_scholes_put, black_scholes_greeks
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 console = Console()
@@ -107,6 +107,71 @@ def price(
             table.add_row("Dividend Yield", f"{dividend:.2%}")
         table.add_row("", "")  # Empty row for spacing
         table.add_row("[bold]Option Price[/]", f"[bold green]{price_value:.4f}[/]")
+
+        console.print(table)
+
+    except Exception as e:
+        error_console = Console(file=sys.stderr)
+        error_console.print(f"[bold red]Error:[/] {e}")
+        raise typer.Exit(1) from e
+
+
+@app.command("greeks")
+def greeks(
+    spot: float = typer.Option(..., help="Current spot price of the underlying asset"),
+    strike: float = typer.Option(..., help="Strike price of the option"),
+    rate: float = typer.Option(..., help="Risk-free interest rate (annualized)"),
+    vol: float = typer.Option(..., help="Volatility of the underlying asset (annualized)"),
+    time: float = typer.Option(..., help="Time to expiration in years"),
+    type: str = typer.Option(..., help="Option type: 'call' or 'put'"),
+    dividend: float = typer.Option(0.0, help="Dividend yield (annualized, default: 0.0)"),
+) -> None:
+    """
+    Calculate all Greeks (Delta, Gamma, Vega, Theta, Rho) for an option.
+
+    Examples:
+        optiback greeks --spot 100 --strike 100 --rate 0.02 --vol 0.25 --time 0.5 --type call
+        optiback greeks --spot 100 --strike 100 --rate 0.02 --vol 0.25 --time 0.5 --type put --dividend 0.01
+    """
+    # Validate inputs
+    spot = validate_positive(spot, "Spot price")
+    strike = validate_positive(strike, "Strike price")
+    vol = validate_non_negative(vol, "Volatility")
+    time = validate_non_negative(time, "Time to expiry")
+    type = validate_option_type(type)
+    dividend = validate_non_negative(dividend, "Dividend yield")
+
+    # Calculate all Greeks
+    try:
+        greeks_dict = black_scholes_greeks(
+            spot=spot,
+            strike=strike,
+            rate=rate,
+            vol=vol,
+            time_to_expiry=time,
+            option_type=type,
+            dividend_yield=dividend,
+        )
+
+        # Display results in a formatted table
+        table = Table(title="Option Greeks", show_header=True, header_style="bold magenta")
+        table.add_column("Parameter", style="cyan")
+        table.add_column("Value", style="green", justify="right")
+
+        table.add_row("Option Type", type.capitalize())
+        table.add_row("Spot Price", f"{spot:.2f}")
+        table.add_row("Strike Price", f"{strike:.2f}")
+        table.add_row("Risk-Free Rate", f"{rate:.2%}")
+        table.add_row("Volatility", f"{vol:.2%}")
+        table.add_row("Time to Expiry", f"{time:.4f} years")
+        if dividend > 0:
+            table.add_row("Dividend Yield", f"{dividend:.2%}")
+        table.add_row("", "")  # Empty row for spacing
+        table.add_row("[bold]Delta (Δ)[/]", f"[bold green]{greeks_dict['delta']:.4f}[/]")
+        table.add_row("[bold]Gamma (Γ)[/]", f"[bold green]{greeks_dict['gamma']:.4f}[/]")
+        table.add_row("[bold]Vega (ν)[/]", f"[bold green]{greeks_dict['vega']:.4f}[/]")
+        table.add_row("[bold]Theta (Θ)[/]", f"[bold green]{greeks_dict['theta']:.4f}[/]")
+        table.add_row("[bold]Rho (ρ)[/]", f"[bold green]{greeks_dict['rho']:.4f}[/]")
 
         console.print(table)
 
