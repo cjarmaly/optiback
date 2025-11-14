@@ -128,6 +128,7 @@ optiback --help
 
 - `optiback version` — print the installed version.
 - `optiback price` — price options using Black–Scholes model
+- `optiback greeks` — calculate all option Greeks (Delta, Gamma, Vega, Theta, Rho)
 
 ### Price command
 
@@ -170,26 +171,61 @@ optiback price --spot 100 --strike 100 --rate 0.02 --vol 0.25 --time 0.5 --type 
 └────────────────┴──────────────┘
 ```
 
+### Greeks command
+
+Calculate all option Greeks (Delta, Gamma, Vega, Theta, Rho) using the Black-Scholes model:
+
+```bash
+# Calculate Greeks for a call option
+optiback greeks --spot 100 --strike 100 --rate 0.02 --vol 0.25 --time 0.5 --type call
+
+# Calculate Greeks for a put option
+optiback greeks --spot 100 --strike 100 --rate 0.02 --vol 0.25 --time 0.5 --type put
+
+# Calculate Greeks with dividend yield
+optiback greeks --spot 100 --strike 100 --rate 0.02 --vol 0.25 --time 0.5 --type call --dividend 0.01
+```
+
+**Parameters:**
+- Same as `price` command (see above)
+
+**Example output:**
+```
+        Option Greeks          
+┏━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┓
+┃ Parameter      ┃        Value ┃
+┡━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━┩
+│ Option Type    │         Call │
+│ Spot Price     │       100.00 │
+│ Strike Price   │       100.00 │
+│ Risk-Free Rate │        2.00% │
+│ Volatility     │       25.00% │
+│ Time to Expiry │ 0.5000 years │
+│                │              │
+│ Delta (Δ)      │       0.5576 │
+│ Gamma (Γ)      │       0.0223 │
+│ Vega (ν)       │       0.2791 │
+│ Theta (Θ)      │      -0.0218 │
+│ Rho (ρ)        │       0.2412 │
+└────────────────┴──────────────┘
+```
+
 ### Planned CLI commands (roadmap)
 
-- `optiback greeks ...` — compute Greeks for a contract/spec
-- `optiback iv ...` — compute implied volatility
+- `optiback implied-vol` — compute implied volatility from market prices
 - `optiback backtest ...` — run delta-hedge and mispricing strategies
 
 ## Python API
-The initial public API is under active development. Early access will include:
 
-- Pricing primitives (Black–Scholes, binomial tree, Monte Carlo)
-- Greeks (Delta, Gamma, Vega, Theta, Rho)
-- Implied volatility solvers
-- Backtesting utilities for delta hedging and mispricing
+OptiBack provides a comprehensive Python API for options pricing, Greeks, and implied volatility calculations.
 
-Example (subject to change as the API stabilizes):
+### Pricing
 
 ```python
-from optiback import black_scholes_call
+from optiback.pricing import black_scholes_call, black_scholes_put
 
-price = black_scholes_call(
+# Price a call option
+call_price = black_scholes_call(
     spot=100.0,
     strike=100.0,
     rate=0.02,
@@ -197,7 +233,91 @@ price = black_scholes_call(
     time_to_expiry=0.5,
     dividend_yield=0.0,
 )
-print(f"Option price: {price:.4f}")  # Output: Option price: 7.5168
+print(f"Call price: {call_price:.4f}")  # Output: Call price: 7.5168
+
+# Price a put option
+put_price = black_scholes_put(
+    spot=100.0,
+    strike=100.0,
+    rate=0.02,
+    vol=0.25,
+    time_to_expiry=0.5,
+)
+print(f"Put price: {put_price:.4f}")  # Output: Put price: 6.5218
+```
+
+### Greeks
+
+```python
+from optiback.pricing import (
+    black_scholes_delta,
+    black_scholes_gamma,
+    black_scholes_vega,
+    black_scholes_theta,
+    black_scholes_rho,
+    black_scholes_greeks,
+)
+
+# Calculate individual Greeks
+delta = black_scholes_delta(
+    spot=100.0,
+    strike=100.0,
+    rate=0.02,
+    vol=0.25,
+    time_to_expiry=0.5,
+    option_type="call",
+)
+print(f"Delta: {delta:.4f}")  # Output: Delta: 0.5576
+
+# Calculate all Greeks at once
+greeks = black_scholes_greeks(
+    spot=100.0,
+    strike=100.0,
+    rate=0.02,
+    vol=0.25,
+    time_to_expiry=0.5,
+    option_type="call",
+)
+print(f"All Greeks: {greeks}")
+# Output: {'delta': 0.5576, 'gamma': 0.0223, 'vega': 0.2791, 'theta': -0.0218, 'rho': 0.2412}
+```
+
+### Implied Volatility
+
+```python
+from optiback.pricing import black_scholes_implied_volatility
+
+# Calculate implied volatility from market price
+implied_vol = black_scholes_implied_volatility(
+    spot=100.0,
+    strike=100.0,
+    rate=0.02,
+    time_to_expiry=0.5,
+    market_price=7.5168,  # Observed market price
+    option_type="call",
+)
+print(f"Implied volatility: {implied_vol:.4f}")  # Output: Implied volatility: 0.2500
+```
+
+### Array Support
+
+All functions support both scalar and NumPy array inputs:
+
+```python
+import numpy as np
+from optiback.pricing import black_scholes_call
+
+# Price multiple options at once
+spots = np.array([90.0, 100.0, 110.0])
+strikes = np.array([100.0, 100.0, 100.0])
+prices = black_scholes_call(
+    spot=spots,
+    strike=strikes,
+    rate=0.02,
+    vol=0.25,
+    time_to_expiry=0.5,
+)
+print(prices)  # Array of prices
 ```
 
 ## Data
@@ -235,8 +355,9 @@ pytest --cov=optiback --cov-report=term-missing
 ```
 
 ## Roadmap
-- CLI subcommands for pricing, greeks, implied vol, and backtests
+- CLI command for implied volatility (`optiback implied-vol`)
 - Fast vectorized/Numba implementations for pricing and Greeks
+- Additional pricing models (Binomial tree, Monte Carlo)
 - Backtest modules with cost models, discrete hedging, and slippage
 - Example notebooks and docs site
 
