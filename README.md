@@ -129,6 +129,7 @@ optiback --help
 - `optiback version` — print the installed version.
 - `optiback price` — price options using Black–Scholes model
 - `optiback greeks` — calculate all option Greeks (Delta, Gamma, Vega, Theta, Rho)
+- `optiback implied-vol` — calculate implied volatility from market prices
 
 ### Price command
 
@@ -210,9 +211,49 @@ optiback greeks --spot 100 --strike 100 --rate 0.02 --vol 0.25 --time 0.5 --type
 └────────────────┴──────────────┘
 ```
 
+### Implied-vol command
+
+Calculate implied volatility from market price using the Black-Scholes model:
+
+```bash
+# Calculate implied volatility for a call option
+optiback implied-vol --spot 100 --strike 100 --rate 0.02 --time 0.5 --price 7.5168 --type call
+
+# Calculate implied volatility for a put option
+optiback implied-vol --spot 100 --strike 100 --rate 0.02 --time 0.5 --price 6.5218 --type put
+
+# Calculate implied volatility with dividend yield
+optiback implied-vol --spot 100 --strike 100 --rate 0.02 --time 0.5 --price 7.5168 --type call --dividend 0.01
+```
+
+**Parameters:**
+- `--spot` (required): Current spot price of the underlying asset
+- `--strike` (required): Strike price of the option
+- `--rate` (required): Risk-free interest rate (annualized, as decimal, e.g., 0.02 for 2%)
+- `--time` (required): Time to expiration in years (e.g., 0.5 for 6 months)
+- `--price` (required): Observed market price of the option
+- `--type` (required): Option type: `call` or `put`
+- `--dividend` (optional): Dividend yield (annualized, as decimal, default: 0.0)
+
+**Example output:**
+```
+       Implied Volatility           
+┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┓
+┃ Parameter          ┃           Value ┃
+┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━┩
+│ Option Type        │            Call │
+│ Spot Price         │          100.00 │
+│ Strike Price       │          100.00 │
+│ Risk-Free Rate     │           2.00% │
+│ Time to Expiry     │    0.5000 years │
+│ Market Price       │          7.5168 │
+│                    │                 │
+│ Implied Volatility │ 0.2500 (25.00%) │
+└────────────────────┴─────────────────┘
+```
+
 ### Planned CLI commands (roadmap)
 
-- `optiback implied-vol` — compute implied volatility from market prices
 - `optiback backtest ...` — run delta-hedge and mispricing strategies
 
 ## Python API
@@ -355,7 +396,6 @@ pytest --cov=optiback --cov-report=term-missing
 ```
 
 ## Roadmap
-- CLI command for implied volatility (`optiback implied-vol`)
 - Fast vectorized/Numba implementations for pricing and Greeks
 - Additional pricing models (Binomial tree, Monte Carlo)
 - Backtest modules with cost models, discrete hedging, and slippage
