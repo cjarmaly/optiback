@@ -88,11 +88,10 @@ def binomial_tree_call(
     result_flat = result.flatten()
 
     for i in range(len(spot_flat)):
-        strike_val = (
-            strike_scalar_value
-            if strike_is_scalar
-            else float(strike_flat[i])
-        )
+        if strike_is_scalar:
+            strike_val: float = strike_scalar_value  # type: ignore[assignment]
+        else:
+            strike_val = float(strike_flat[i])
         result_flat[i] = _binomial_tree_call_scalar(
             float(spot_flat[i]),
             strike_val,
@@ -105,7 +104,7 @@ def binomial_tree_call(
 
     # Copy back from flat view to result (flatten() creates a view, so modifications are preserved)
     result[:] = result_flat.reshape(spot_arr.shape)
-    return result  # type: ignore[no-any-return]
+    return result
 
 
 def _binomial_tree_call_scalar(
@@ -137,7 +136,7 @@ def _binomial_tree_call_scalar(
     # Build stock price tree (forward)
     stock_prices = np.zeros(steps + 1)
     for j in range(steps + 1):
-        stock_prices[j] = spot * (u ** (steps - j)) * (d ** j)
+        stock_prices[j] = spot * (u ** (steps - j)) * (d**j)
 
     # Initialize option values at expiration
     option_values = np.maximum(stock_prices - strike, 0.0)
@@ -146,7 +145,7 @@ def _binomial_tree_call_scalar(
     for i in range(steps - 1, -1, -1):
         for j in range(i + 1):
             # Stock price at this node
-            stock_price = spot * (u ** (i - j)) * (d ** j)
+            stock_price = spot * (u ** (i - j)) * (d**j)
 
             # Option value from continuation (risk-neutral expectation)
             continuation_value = disc_factor * (
@@ -245,11 +244,10 @@ def binomial_tree_put(
     result_flat = result.flatten()
 
     for i in range(len(spot_flat)):
-        strike_val = (
-            strike_scalar_value
-            if strike_is_scalar
-            else float(strike_flat[i])
-        )
+        if strike_is_scalar:
+            strike_val: float = strike_scalar_value  # type: ignore[assignment]
+        else:
+            strike_val = float(strike_flat[i])
         result_flat[i] = _binomial_tree_put_scalar(
             float(spot_flat[i]),
             strike_val,
@@ -262,7 +260,7 @@ def binomial_tree_put(
 
     # Copy back from flat view to result (flatten() creates a view, so modifications are preserved)
     result[:] = result_flat.reshape(spot_arr.shape)
-    return result  # type: ignore[no-any-return]
+    return result
 
 
 def _binomial_tree_put_scalar(
@@ -294,7 +292,7 @@ def _binomial_tree_put_scalar(
     # Build stock price tree (forward)
     stock_prices = np.zeros(steps + 1)
     for j in range(steps + 1):
-        stock_prices[j] = spot * (u ** (steps - j)) * (d ** j)
+        stock_prices[j] = spot * (u ** (steps - j)) * (d**j)
 
     # Initialize option values at expiration
     option_values = np.maximum(strike - stock_prices, 0.0)
@@ -303,7 +301,7 @@ def _binomial_tree_put_scalar(
     for i in range(steps - 1, -1, -1):
         for j in range(i + 1):
             # Stock price at this node
-            stock_price = spot * (u ** (i - j)) * (d ** j)
+            stock_price = spot * (u ** (i - j)) * (d**j)
 
             # Option value from continuation (risk-neutral expectation)
             continuation_value = disc_factor * (
@@ -317,4 +315,3 @@ def _binomial_tree_put_scalar(
             option_values[j] = max(continuation_value, exercise_value)
 
     return float(option_values[0])
-
