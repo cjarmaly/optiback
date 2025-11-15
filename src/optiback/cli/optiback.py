@@ -6,7 +6,12 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from optiback.pricing import black_scholes_call, black_scholes_greeks, black_scholes_put
+from optiback.pricing import (
+    black_scholes_call,
+    black_scholes_greeks,
+    black_scholes_implied_volatility,
+    black_scholes_put,
+)
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 console = Console()
@@ -172,6 +177,70 @@ def greeks(
         table.add_row("[bold]Vega (ν)[/]", f"[bold green]{greeks_dict['vega']:.4f}[/]")
         table.add_row("[bold]Theta (Θ)[/]", f"[bold green]{greeks_dict['theta']:.4f}[/]")
         table.add_row("[bold]Rho (ρ)[/]", f"[bold green]{greeks_dict['rho']:.4f}[/]")
+
+        console.print(table)
+
+    except Exception as e:
+        error_console = Console(file=sys.stderr)
+        error_console.print(f"[bold red]Error:[/] {e}")
+        raise typer.Exit(1) from e
+
+
+@app.command("implied-vol")
+def implied_vol(
+    spot: float = typer.Option(..., help="Current spot price of the underlying asset"),
+    strike: float = typer.Option(..., help="Strike price of the option"),
+    rate: float = typer.Option(..., help="Risk-free interest rate (annualized)"),
+    time: float = typer.Option(..., help="Time to expiration in years"),
+    price: float = typer.Option(..., help="Observed market price of the option"),
+    type: str = typer.Option(..., help="Option type: 'call' or 'put'"),
+    dividend: float = typer.Option(0.0, help="Dividend yield (annualized, default: 0.0)"),
+) -> None:
+    """
+    Calculate implied volatility from market price using Black-Scholes model.
+
+    Examples:
+        optiback implied-vol --spot 100 --strike 100 --rate 0.02 --time 0.5 --price 7.5168 --type call
+        optiback implied-vol --spot 100 --strike 100 --rate 0.02 --time 0.5 --price 6.5218 --type put --dividend 0.01
+    """
+    # Validate inputs
+    spot = validate_positive(spot, "Spot price")
+    strike = validate_positive(strike, "Strike price")
+    time = validate_non_negative(time, "Time to expiry")
+    price = validate_non_negative(price, "Market price")
+    type = validate_option_type(type)
+    dividend = validate_non_negative(dividend, "Dividend yield")
+
+    # Calculate implied volatility
+    try:
+        implied_vol_value = black_scholes_implied_volatility(
+            spot=spot,
+            strike=strike,
+            rate=rate,
+            time_to_expiry=time,
+            market_price=price,
+            option_type=type,
+            dividend_yield=dividend,
+        )
+
+        # Display results in a formatted table
+        table = Table(title="Implied Volatility", show_header=True, header_style="bold magenta")
+        table.add_column("Parameter", style="cyan")
+        table.add_column("Value", style="green", justify="right")
+
+        table.add_row("Option Type", type.capitalize())
+        table.add_row("Spot Price", f"{spot:.2f}")
+        table.add_row("Strike Price", f"{strike:.2f}")
+        table.add_row("Risk-Free Rate", f"{rate:.2%}")
+        table.add_row("Time to Expiry", f"{time:.4f} years")
+        if dividend > 0:
+            table.add_row("Dividend Yield", f"{dividend:.2%}")
+        table.add_row("Market Price", f"{price:.4f}")
+        table.add_row("", "")  # Empty row for spacing
+        table.add_row(
+            "[bold]Implied Volatility[/]",
+            f"[bold green]{implied_vol_value:.4f}[/] ({implied_vol_value:.2%})",
+        )
 
         console.print(table)
 
