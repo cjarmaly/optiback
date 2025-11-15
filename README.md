@@ -128,6 +128,7 @@ optiback --help
 
 - `optiback version` — print the installed version.
 - `optiback price` — price options using Black–Scholes model
+- `optiback price-binomial` — price American options using Binomial Tree model (CRR)
 - `optiback greeks` — calculate all option Greeks (Delta, Gamma, Vega, Theta, Rho)
 - `optiback implied-vol` — calculate implied volatility from market prices
 
@@ -252,6 +253,50 @@ optiback implied-vol --spot 100 --strike 100 --rate 0.02 --time 0.5 --price 7.51
 └────────────────────┴─────────────────┘
 ```
 
+### Price-binomial command
+
+Price American call or put options using the Binomial Tree model (CRR):
+
+```bash
+# Price an American call option
+optiback price-binomial --spot 100 --strike 100 --rate 0.02 --vol 0.25 --time 0.5 --type call
+
+# Price an American put option
+optiback price-binomial --spot 100 --strike 100 --rate 0.02 --vol 0.25 --time 0.5 --type put
+
+# Price with dividend yield and custom steps
+optiback price-binomial --spot 100 --strike 100 --rate 0.02 --vol 0.25 --time 0.5 --type call --dividend 0.01 --steps 200
+```
+
+**Parameters:**
+- `--spot` (required): Current spot price of the underlying asset
+- `--strike` (required): Strike price of the option
+- `--rate` (required): Risk-free interest rate (annualized, as decimal, e.g., 0.02 for 2%)
+- `--vol` (required): Volatility of the underlying asset (annualized, as decimal, e.g., 0.25 for 25%)
+- `--time` (required): Time to expiration in years (e.g., 0.5 for 6 months)
+- `--type` (required): Option type: `call` or `put`
+- `--dividend` (optional): Dividend yield (annualized, as decimal, default: 0.0)
+- `--steps` (optional): Number of time steps in the binomial tree (default: 100)
+
+**Example output:**
+```
+  Binomial Tree Option Pricing   
+             Results             
+┏━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┓
+┃ Parameter      ┃        Value ┃
+┡━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━┩
+│ Option Type    │         Call │
+│ Spot Price     │       100.00 │
+│ Strike Price   │       100.00 │
+│ Risk-Free Rate │        2.00% │
+│ Volatility     │       25.00% │
+│ Time to Expiry │ 0.5000 years │
+│ Steps          │          100 │
+│                │              │
+│ Option Price   │       7.4993 │
+└────────────────┴──────────────┘
+```
+
 ### Planned CLI commands (roadmap)
 
 - `optiback backtest ...` — run delta-hedge and mispricing strategies
@@ -261,6 +306,8 @@ optiback implied-vol --spot 100 --strike 100 --rate 0.02 --time 0.5 --price 7.51
 OptiBack provides a comprehensive Python API for options pricing, Greeks, and implied volatility calculations.
 
 ### Pricing
+
+#### Black-Scholes Model
 
 ```python
 from optiback.pricing import black_scholes_call, black_scholes_put
@@ -285,6 +332,47 @@ put_price = black_scholes_put(
     time_to_expiry=0.5,
 )
 print(f"Put price: {put_price:.4f}")  # Output: Put price: 6.5218
+```
+
+#### Binomial Tree Model (American Options)
+
+Price American options using the Cox-Ross-Rubinstein (CRR) binomial tree model:
+
+```python
+from optiback.pricing import binomial_tree_call, binomial_tree_put
+
+# Price an American call option
+call_price = binomial_tree_call(
+    spot=100.0,
+    strike=100.0,
+    rate=0.02,
+    vol=0.25,
+    time_to_expiry=0.5,
+    dividend_yield=0.0,
+    steps=100,  # Number of time steps (default: 100)
+)
+print(f"American call price: {call_price:.4f}")  # Output: American call price: 7.4993
+
+# Price an American put option
+put_price = binomial_tree_put(
+    spot=100.0,
+    strike=100.0,
+    rate=0.02,
+    vol=0.25,
+    time_to_expiry=0.5,
+    steps=100,
+)
+print(f"American put price: {put_price:.4f}")  # Output: American put price: 6.5857
+
+# Higher steps for better accuracy (converges to Black-Scholes for European options)
+call_price_precise = binomial_tree_call(
+    spot=100.0,
+    strike=100.0,
+    rate=0.02,
+    vol=0.25,
+    time_to_expiry=0.5,
+    steps=500,  # More steps = higher accuracy
+)
 ```
 
 ### Greeks
@@ -342,13 +430,13 @@ print(f"Implied volatility: {implied_vol:.4f}")  # Output: Implied volatility: 0
 
 ### Array Support
 
-All functions support both scalar and NumPy array inputs:
+All pricing functions support both scalar and NumPy array inputs:
 
 ```python
 import numpy as np
-from optiback.pricing import black_scholes_call
+from optiback.pricing import black_scholes_call, binomial_tree_call
 
-# Price multiple options at once
+# Price multiple options at once with Black-Scholes
 spots = np.array([90.0, 100.0, 110.0])
 strikes = np.array([100.0, 100.0, 100.0])
 prices = black_scholes_call(
@@ -359,6 +447,17 @@ prices = black_scholes_call(
     time_to_expiry=0.5,
 )
 print(prices)  # Array of prices
+
+# Price multiple American options with Binomial Tree
+american_prices = binomial_tree_call(
+    spot=spots,
+    strike=strikes,
+    rate=0.02,
+    vol=0.25,
+    time_to_expiry=0.5,
+    steps=100,
+)
+print(american_prices)  # Array of American option prices
 ```
 
 ## Data
@@ -397,7 +496,7 @@ pytest --cov=optiback --cov-report=term-missing
 
 ## Roadmap
 - Fast vectorized/Numba implementations for pricing and Greeks
-- Additional pricing models (Binomial tree, Monte Carlo)
+- Additional pricing models (Monte Carlo)
 - Backtest modules with cost models, discrete hedging, and slippage
 - Example notebooks and docs site
 
