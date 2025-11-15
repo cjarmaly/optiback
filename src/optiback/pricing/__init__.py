@@ -1,5 +1,6 @@
 """Options pricing models."""
 
+from optiback.pricing.binomial import binomial_tree_call, binomial_tree_put
 from optiback.pricing.black_scholes import black_scholes_call, black_scholes_put
 from optiback.pricing.greeks import (
     black_scholes_delta,
@@ -12,6 +13,8 @@ from optiback.pricing.greeks import (
 from optiback.pricing.implied_vol import black_scholes_implied_volatility
 
 __all__ = [
+    "binomial_tree_call",
+    "binomial_tree_put",
     "black_scholes_call",
     "black_scholes_put",
     "black_scholes_delta",
