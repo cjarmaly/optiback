@@ -13,6 +13,8 @@ from optiback.pricing import (
     black_scholes_greeks,
     black_scholes_implied_volatility,
     black_scholes_put,
+    monte_carlo_call,
+    monte_carlo_put,
 )
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
@@ -58,6 +60,13 @@ def validate_steps(steps: int) -> int:
     if steps <= 0:
         raise typer.BadParameter(f"steps must be greater than 0, got {steps}")
     return steps
+
+
+def validate_simulations(simulations: int) -> int:
+    """Validate that simulations is a positive integer."""
+    if simulations <= 0:
+        raise typer.BadParameter(f"simulations must be greater than 0, got {simulations}")
+    return simulations
 
 
 @app.command("price")
@@ -327,6 +336,86 @@ def price_binomial(
         if dividend > 0:
             table.add_row("Dividend Yield", f"{dividend:.2%}")
         table.add_row("Steps", f"{steps}")
+        table.add_row("", "")  # Empty row for spacing
+        table.add_row("[bold]Option Price[/]", f"[bold green]{price_value:.4f}[/]")
+
+        console.print(table)
+
+    except Exception as e:
+        error_console = Console(file=sys.stderr)
+        error_console.print(f"[bold red]Error:[/] {e}")
+        raise typer.Exit(1) from e
+
+
+@app.command("price-montecarlo")
+def price_montecarlo(
+    spot: float = typer.Option(..., help="Current spot price of the underlying asset"),
+    strike: float = typer.Option(..., help="Strike price of the option"),
+    rate: float = typer.Option(..., help="Risk-free interest rate (annualized)"),
+    vol: float = typer.Option(..., help="Volatility of the underlying asset (annualized)"),
+    time: float = typer.Option(..., help="Time to expiration in years"),
+    type: str = typer.Option(..., help="Option type: 'call' or 'put'"),
+    dividend: float = typer.Option(0.0, help="Dividend yield (annualized, default: 0.0)"),
+    simulations: int = typer.Option(100000, help="Number of Monte Carlo simulations (default: 100000)"),
+    seed: int | None = typer.Option(None, help="Random seed for reproducibility (optional)"),
+) -> None:
+    """
+    Price a European option using Monte Carlo simulation.
+
+    Examples:
+        optiback price-montecarlo --spot 100 --strike 100 --rate 0.02 --vol 0.25 --time 0.5 --type call
+        optiback price-montecarlo --spot 100 --strike 100 --rate 0.02 --vol 0.25 --time 0.5 --type put --simulations 200000 --seed 42
+    """
+    # Validate inputs
+    spot = validate_positive(spot, "Spot price")
+    strike = validate_positive(strike, "Strike price")
+    vol = validate_non_negative(vol, "Volatility")
+    time = validate_non_negative(time, "Time to expiry")
+    type = validate_option_type(type)
+    dividend = validate_non_negative(dividend, "Dividend yield")
+    simulations = validate_simulations(simulations)
+
+    # Calculate option price
+    try:
+        if type == "call":
+            price_value = monte_carlo_call(
+                spot=spot,
+                strike=strike,
+                rate=rate,
+                vol=vol,
+                time_to_expiry=time,
+                dividend_yield=dividend,
+                simulations=simulations,
+                seed=seed,
+            )
+        else:  # put
+            price_value = monte_carlo_put(
+                spot=spot,
+                strike=strike,
+                rate=rate,
+                vol=vol,
+                time_to_expiry=time,
+                dividend_yield=dividend,
+                simulations=simulations,
+                seed=seed,
+            )
+
+        # Display results in a formatted table
+        table = Table(title="Monte Carlo Option Pricing Results", show_header=True, header_style="bold magenta")
+        table.add_column("Parameter", style="cyan")
+        table.add_column("Value", style="green", justify="right")
+
+        table.add_row("Option Type", type.capitalize())
+        table.add_row("Spot Price", f"{spot:.2f}")
+        table.add_row("Strike Price", f"{strike:.2f}")
+        table.add_row("Risk-Free Rate", f"{rate:.2%}")
+        table.add_row("Volatility", f"{vol:.2%}")
+        table.add_row("Time to Expiry", f"{time:.4f} years")
+        if dividend > 0:
+            table.add_row("Dividend Yield", f"{dividend:.2%}")
+        table.add_row("Simulations", f"{simulations:,}")
+        if seed is not None:
+            table.add_row("Seed", f"{seed}")
         table.add_row("", "")  # Empty row for spacing
         table.add_row("[bold]Option Price[/]", f"[bold green]{price_value:.4f}[/]")
 

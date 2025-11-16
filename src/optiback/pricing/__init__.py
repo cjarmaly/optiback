@@ -11,6 +11,7 @@ from optiback.pricing.greeks import (
     black_scholes_vega,
 )
 from optiback.pricing.implied_vol import black_scholes_implied_volatility
+from optiback.pricing.monte_carlo import monte_carlo_call, monte_carlo_put
 
 __all__ = [
     "binomial_tree_call",
@@ -24,4 +25,6 @@ __all__ = [
     "black_scholes_rho",
     "black_scholes_greeks",
     "black_scholes_implied_volatility",
+    "monte_carlo_call",
+    "monte_carlo_put",
 ]
