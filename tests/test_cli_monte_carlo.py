@@ -467,4 +467,3 @@ def test_price_montecarlo_reproducibility_with_seed():
     price1 = [line for line in result1.stdout.split("\n") if "Option Price" in line][0]
     price2 = [line for line in result2.stdout.split("\n") if "Option Price" in line][0]
     assert price1 == price2
-

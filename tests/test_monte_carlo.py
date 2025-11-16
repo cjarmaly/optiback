@@ -528,7 +528,7 @@ class TestMonteCarloAccuracy:
         test_cases = [
             (100.0, 100.0, 0.05, 0.20, 1.0),  # ATM
             (110.0, 100.0, 0.05, 0.20, 1.0),  # ITM
-            (90.0, 100.0, 0.05, 0.20, 1.0),   # OTM
+            (90.0, 100.0, 0.05, 0.20, 1.0),  # OTM
         ]
 
         for spot, strike, rate, vol, time_to_expiry in test_cases:
@@ -559,7 +559,7 @@ class TestMonteCarloAccuracy:
         """Test that Monte Carlo put prices are close to Black-Scholes."""
         test_cases = [
             (100.0, 100.0, 0.05, 0.20, 1.0),  # ATM
-            (90.0, 100.0, 0.05, 0.20, 1.0),   # ITM
+            (90.0, 100.0, 0.05, 0.20, 1.0),  # ITM
             (110.0, 100.0, 0.05, 0.20, 1.0),  # OTM
         ]
 
@@ -585,4 +585,3 @@ class TestMonteCarloAccuracy:
             error = abs(mc_price - bs_price)
             max_error = max(0.15, bs_price * 0.02)
             assert error < max_error, f"Error {error} too large for spot={spot}, strike={strike}"
-

@@ -323,4 +323,3 @@ def _monte_carlo_put_scalar(
     # Discount to present value
     discount_factor = np.exp(-rate * time_to_expiry)
     return float(discount_factor * avg_payoff)
-

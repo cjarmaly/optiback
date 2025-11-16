@@ -356,7 +356,9 @@ def price_montecarlo(
     time: float = typer.Option(..., help="Time to expiration in years"),
     type: str = typer.Option(..., help="Option type: 'call' or 'put'"),
     dividend: float = typer.Option(0.0, help="Dividend yield (annualized, default: 0.0)"),
-    simulations: int = typer.Option(100000, help="Number of Monte Carlo simulations (default: 100000)"),
+    simulations: int = typer.Option(
+        100000, help="Number of Monte Carlo simulations (default: 100000)"
+    ),
     seed: int | None = typer.Option(None, help="Random seed for reproducibility (optional)"),
 ) -> None:
     """
@@ -401,7 +403,11 @@ def price_montecarlo(
             )
 
         # Display results in a formatted table
-        table = Table(title="Monte Carlo Option Pricing Results", show_header=True, header_style="bold magenta")
+        table = Table(
+            title="Monte Carlo Option Pricing Results",
+            show_header=True,
+            header_style="bold magenta",
+        )
         table.add_column("Parameter", style="cyan")
         table.add_column("Value", style="green", justify="right")
 
