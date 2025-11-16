@@ -109,7 +109,9 @@ def backtest_delta_hedge(
         dividend_yield=dividend_yield,
     )
     # Cast to float since we're using scalar inputs
-    initial_delta_val: float = float(initial_delta) if not isinstance(initial_delta, float) else initial_delta
+    initial_delta_val: float = (
+        float(initial_delta) if not isinstance(initial_delta, float) else initial_delta
+    )
 
     # Initial hedge: buy/sell stock to offset option delta
     target_delta = -option_position * initial_delta_val  # Need to hedge option's delta
@@ -155,7 +157,9 @@ def backtest_delta_hedge(
             dividend_yield=dividend_yield,
         )
         # Cast to float since we're using scalar inputs
-        current_delta_val: float = float(current_delta) if not isinstance(current_delta, float) else current_delta
+        current_delta_val: float = (
+            float(current_delta) if not isinstance(current_delta, float) else current_delta
+        )
 
         # Calculate target hedge
         target_delta = -option_position * current_delta_val
@@ -200,7 +204,11 @@ def backtest_delta_hedge(
                 time_to_expiry=remaining_time,
                 dividend_yield=dividend_yield,
             )
-            final_option_price = float(final_option_price_raw) if not isinstance(final_option_price_raw, float) else final_option_price_raw
+            final_option_price = (
+                float(final_option_price_raw)
+                if not isinstance(final_option_price_raw, float)
+                else final_option_price_raw
+            )
         else:  # put
             final_option_price_raw = black_scholes_put(
                 spot=final_spot,
@@ -210,7 +218,11 @@ def backtest_delta_hedge(
                 time_to_expiry=remaining_time,
                 dividend_yield=dividend_yield,
             )
-            final_option_price = float(final_option_price_raw) if not isinstance(final_option_price_raw, float) else final_option_price_raw
+            final_option_price = (
+                float(final_option_price_raw)
+                if not isinstance(final_option_price_raw, float)
+                else final_option_price_raw
+            )
 
     # Final portfolio value
     option_pnl = option_position * (final_option_price - initial_option_price)
