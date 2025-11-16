@@ -129,6 +129,7 @@ optiback --help
 - `optiback version` — print the installed version.
 - `optiback price` — price options using Black–Scholes model
 - `optiback price-binomial` — price American options using Binomial Tree model (CRR)
+- `optiback price-montecarlo` — price European options using Monte Carlo simulation
 - `optiback greeks` — calculate all option Greeks (Delta, Gamma, Vega, Theta, Rho)
 - `optiback implied-vol` — calculate implied volatility from market prices
 
@@ -297,6 +298,52 @@ optiback price-binomial --spot 100 --strike 100 --rate 0.02 --vol 0.25 --time 0.
 └────────────────┴──────────────┘
 ```
 
+### Price-montecarlo command
+
+Price European call or put options using Monte Carlo simulation:
+
+```bash
+# Price an European call option
+optiback price-montecarlo --spot 100 --strike 100 --rate 0.02 --vol 0.25 --time 0.5 --type call
+
+# Price an European put option
+optiback price-montecarlo --spot 100 --strike 100 --rate 0.02 --vol 0.25 --time 0.5 --type put
+
+# Price with dividend yield, custom simulations, and seed
+optiback price-montecarlo --spot 100 --strike 100 --rate 0.02 --vol 0.25 --time 0.5 --type call --dividend 0.01 --simulations 200000 --seed 42
+```
+
+**Parameters:**
+- `--spot` (required): Current spot price of the underlying asset
+- `--strike` (required): Strike price of the option
+- `--rate` (required): Risk-free interest rate (annualized, as decimal, e.g., 0.02 for 2%)
+- `--vol` (required): Volatility of the underlying asset (annualized, as decimal, e.g., 0.25 for 25%)
+- `--time` (required): Time to expiration in years (e.g., 0.5 for 6 months)
+- `--type` (required): Option type: `call` or `put`
+- `--dividend` (optional): Dividend yield (annualized, as decimal, default: 0.0)
+- `--simulations` (optional): Number of Monte Carlo simulations (default: 100000)
+- `--seed` (optional): Random seed for reproducibility (integer, default: None)
+
+**Example output:**
+```
+   Monte Carlo Option Pricing    
+             Results             
+┏━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┓
+┃ Parameter      ┃        Value ┃
+┡━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━┩
+│ Option Type    │         Call │
+│ Spot Price     │       100.00 │
+│ Strike Price   │       100.00 │
+│ Risk-Free Rate │        2.00% │
+│ Volatility     │       25.00% │
+│ Time to Expiry │ 0.5000 years │
+│ Simulations    │      100,000 │
+│ Seed           │           42 │
+│                │              │
+│ Option Price   │       7.5288 │
+└────────────────┴──────────────┘
+```
+
 ### Planned CLI commands (roadmap)
 
 - `optiback backtest ...` — run delta-hedge and mispricing strategies
@@ -375,6 +422,52 @@ call_price_precise = binomial_tree_call(
 )
 ```
 
+#### Monte Carlo Model (European Options)
+
+Price European options using Monte Carlo simulation with geometric Brownian motion:
+
+```python
+from optiback.pricing import monte_carlo_call, monte_carlo_put
+
+# Price an European call option
+call_price = monte_carlo_call(
+    spot=100.0,
+    strike=100.0,
+    rate=0.02,
+    vol=0.25,
+    time_to_expiry=0.5,
+    dividend_yield=0.0,
+    simulations=100000,  # Number of simulations (default: 100000)
+    seed=42,  # Random seed for reproducibility (optional)
+)
+print(f"European call price: {call_price:.4f}")  # Output: European call price: 7.5288
+
+# Price an European put option
+put_price = monte_carlo_put(
+    spot=100.0,
+    strike=100.0,
+    rate=0.02,
+    vol=0.25,
+    time_to_expiry=0.5,
+    simulations=100000,
+    seed=42,
+)
+print(f"European put price: {put_price:.4f}")  # Output: European put price: 6.5255
+
+# More simulations for better accuracy (converges to Black-Scholes)
+call_price_precise = monte_carlo_call(
+    spot=100.0,
+    strike=100.0,
+    rate=0.02,
+    vol=0.25,
+    time_to_expiry=0.5,
+    simulations=500000,  # More simulations = higher accuracy
+    seed=42,
+)
+```
+
+**Note:** Monte Carlo simulation includes antithetic variates for variance reduction, improving accuracy with fewer simulations.
+
 ### Greeks
 
 ```python
@@ -434,7 +527,7 @@ All pricing functions support both scalar and NumPy array inputs:
 
 ```python
 import numpy as np
-from optiback.pricing import black_scholes_call, binomial_tree_call
+from optiback.pricing import black_scholes_call, binomial_tree_call, monte_carlo_call
 
 # Price multiple options at once with Black-Scholes
 spots = np.array([90.0, 100.0, 110.0])
@@ -458,6 +551,18 @@ american_prices = binomial_tree_call(
     steps=100,
 )
 print(american_prices)  # Array of American option prices
+
+# Price multiple European options with Monte Carlo
+mc_prices = monte_carlo_call(
+    spot=spots,
+    strike=strikes,
+    rate=0.02,
+    vol=0.25,
+    time_to_expiry=0.5,
+    simulations=100000,
+    seed=42,
+)
+print(mc_prices)  # Array of European option prices
 ```
 
 ## Data
@@ -496,7 +601,6 @@ pytest --cov=optiback --cov-report=term-missing
 
 ## Roadmap
 - Fast vectorized/Numba implementations for pricing and Greeks
-- Additional pricing models (Monte Carlo)
 - Backtest modules with cost models, discrete hedging, and slippage
 - Example notebooks and docs site
 
