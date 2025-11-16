@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
+import numpy as np
 import typer
 from rich.console import Console
 from rich.table import Table
 
+from optiback.backtest import (
+    backtest_delta_hedge,
+    backtest_mispricing,
+)
 from optiback.pricing import (
     binomial_tree_call,
     binomial_tree_put,
@@ -424,6 +430,230 @@ def price_montecarlo(
             table.add_row("Seed", f"{seed}")
         table.add_row("", "")  # Empty row for spacing
         table.add_row("[bold]Option Price[/]", f"[bold green]{price_value:.4f}[/]")
+
+        console.print(table)
+
+    except Exception as e:
+        error_console = Console(file=sys.stderr)
+        error_console.print(f"[bold red]Error:[/] {e}")
+        raise typer.Exit(1) from e
+
+
+def load_prices_from_file(file_path: str) -> np.ndarray:
+    """Load prices from a CSV or text file."""
+    path = Path(file_path)
+    if not path.exists():
+        raise typer.BadParameter(f"File not found: {file_path}")
+
+    try:
+        # Try loading as CSV first
+        prices = np.loadtxt(file_path, delimiter=",", dtype=float)
+        # Flatten if 2D array (single column)
+        if prices.ndim > 1:
+            prices = prices.flatten()
+        return prices
+    except Exception as e:
+        raise typer.BadParameter(f"Error loading prices from {file_path}: {e}") from e
+
+
+@app.command("backtest-delta-hedge")
+def backtest_delta_hedge_cli(
+    spot_file: str = typer.Option(
+        ..., help="Path to file containing spot prices (CSV or space-separated)"
+    ),
+    strike: float = typer.Option(..., help="Strike price of the option"),
+    rate: float = typer.Option(..., help="Risk-free interest rate (annualized)"),
+    vol: float = typer.Option(..., help="Volatility of the underlying asset (annualized)"),
+    time: float = typer.Option(..., help="Time to expiration in years"),
+    type: str = typer.Option(..., help="Option type: 'call' or 'put'"),
+    option_position: float = typer.Option(
+        -1.0, help="Option position size (negative = short, default: -1.0)"
+    ),
+    dividend: float = typer.Option(0.0, help="Dividend yield (annualized, default: 0.0)"),
+    cost_per_share: float = typer.Option(0.01, help="Transaction cost per share (default: $0.01)"),
+    spread_bps: float = typer.Option(5.0, help="Bid-ask spread in basis points (default: 5.0)"),
+    slippage_bps: float = typer.Option(5.0, help="Slippage in basis points (default: 5.0)"),
+    impact_factor: float = typer.Option(0.1, help="Market impact factor (default: 0.1)"),
+) -> None:
+    """
+    Backtest a delta-hedged option position.
+
+    Simulates maintaining a delta-neutral portfolio by rebalancing stock positions
+    as the option's delta changes over time. Accounts for transaction costs, slippage,
+    and discrete rebalancing.
+
+    Examples:
+        optiback backtest-delta-hedge --spot-file prices.csv --strike 100 --rate 0.02 --vol 0.25 --time 0.25 --type call
+    """
+    # Validate inputs (file path will be validated in load_prices_from_file)
+    strike = validate_positive(strike, "Strike price")
+    vol = validate_non_negative(vol, "Volatility")
+    time = validate_non_negative(time, "Time to expiry")
+    type = validate_option_type(type)
+    dividend = validate_non_negative(dividend, "Dividend yield")
+    cost_per_share = validate_non_negative(cost_per_share, "Cost per share")
+    spread_bps = validate_non_negative(spread_bps, "Spread")
+    slippage_bps = validate_non_negative(slippage_bps, "Slippage")
+    impact_factor = validate_non_negative(impact_factor, "Impact factor")
+
+    try:
+        # Load spot prices from file
+        spot_prices = load_prices_from_file(spot_file)
+
+        if len(spot_prices) < 2:
+            raise typer.BadParameter("Spot prices file must contain at least 2 prices")
+
+        # Run backtest
+        result = backtest_delta_hedge(
+            spot_prices=spot_prices,
+            strike=strike,
+            rate=rate,
+            vol=vol,
+            time_to_expiry=time,
+            option_type=type,
+            option_position=option_position,
+            dividend_yield=dividend,
+            cost_per_share=cost_per_share,
+            bid_ask_spread_bps=spread_bps,
+            slippage_bps=slippage_bps,
+            impact_factor=impact_factor,
+        )
+
+        # Display results
+        table = Table(
+            title="Delta-Hedge Backtest Results",
+            show_header=True,
+            header_style="bold magenta",
+        )
+        table.add_column("Metric", style="cyan")
+        table.add_column("Value", style="green", justify="right")
+
+        table.add_row("Strategy", result.strategy_type.replace("_", "-").title())
+        table.add_row("Initial Value", f"${result.initial_value:.2f}")
+        table.add_row("Final Value", f"${result.final_value:.2f}")
+        table.add_row("Total P&L", f"${result.total_pnl:.2f}")
+        table.add_row("Transaction Costs", f"${result.transaction_costs:.2f}")
+        table.add_row("Slippage Costs", f"${result.slippage_costs:.2f}")
+        table.add_row(
+            "Net P&L", f"${result.total_pnl - result.transaction_costs - result.slippage_costs:.2f}"
+        )
+        table.add_row("Number of Trades", f"{result.num_trades}")
+        table.add_row("Return", f"{result.returns:.2%}")
+
+        console.print(table)
+
+    except Exception as e:
+        error_console = Console(file=sys.stderr)
+        error_console.print(f"[bold red]Error:[/] {e}")
+        raise typer.Exit(1) from e
+
+
+@app.command("backtest-mispricing")
+def backtest_mispricing_cli(
+    spot_file: str = typer.Option(
+        ..., help="Path to file containing spot prices (CSV or space-separated)"
+    ),
+    market_price_file: str = typer.Option(
+        ..., help="Path to file containing market option prices (CSV or space-separated)"
+    ),
+    strike: float = typer.Option(..., help="Strike price of the option"),
+    rate: float = typer.Option(..., help="Risk-free interest rate (annualized)"),
+    vol: float = typer.Option(..., help="Volatility of the underlying asset (annualized)"),
+    time: float = typer.Option(..., help="Time to expiration in years"),
+    type: str = typer.Option(..., help="Option type: 'call' or 'put'"),
+    model: str = typer.Option(
+        "black_scholes", help="Pricing model: 'black_scholes', 'binomial', or 'monte_carlo'"
+    ),
+    threshold: float = typer.Option(0.05, help="Mispricing threshold (default: 0.05 = 5%)"),
+    dividend: float = typer.Option(0.0, help="Dividend yield (annualized, default: 0.0)"),
+    cost_per_share: float = typer.Option(0.01, help="Transaction cost per share (default: $0.01)"),
+    spread_bps: float = typer.Option(5.0, help="Bid-ask spread in basis points (default: 5.0)"),
+    slippage_bps: float = typer.Option(5.0, help="Slippage in basis points (default: 5.0)"),
+    impact_factor: float = typer.Option(0.1, help="Market impact factor (default: 0.1)"),
+    simulations: int = typer.Option(
+        100000,
+        help="Number of Monte Carlo simulations (default: 100000, only for monte_carlo model)",
+    ),
+    seed: int | None = typer.Option(None, help="Random seed for Monte Carlo (optional)"),
+) -> None:
+    """
+    Backtest buying/selling options when they're mispriced relative to theoretical value.
+
+    Compares market prices to theoretical prices and executes trades when mispricing
+    exceeds threshold. Accounts for transaction costs and slippage.
+
+    Examples:
+        optiback backtest-mispricing --spot-file spots.csv --market-price-file prices.csv --strike 100 --rate 0.02 --vol 0.25 --time 0.25 --type call --model black_scholes
+    """
+    # Validate inputs
+    strike = validate_positive(strike, "Strike price")
+    vol = validate_non_negative(vol, "Volatility")
+    time = validate_non_negative(time, "Time to expiry")
+    type = validate_option_type(type)
+    threshold = validate_non_negative(threshold, "Threshold")
+    dividend = validate_non_negative(dividend, "Dividend yield")
+    cost_per_share = validate_non_negative(cost_per_share, "Cost per share")
+    spread_bps = validate_non_negative(spread_bps, "Spread")
+    slippage_bps = validate_non_negative(slippage_bps, "Slippage")
+    impact_factor = validate_non_negative(impact_factor, "Impact factor")
+
+    if model not in ["black_scholes", "binomial", "monte_carlo"]:
+        raise typer.BadParameter(
+            f"Model must be 'black_scholes', 'binomial', or 'monte_carlo', got '{model}'"
+        )
+
+    try:
+        # Load prices from files
+        spot_prices = load_prices_from_file(spot_file)
+        market_prices = load_prices_from_file(market_price_file)
+
+        if len(spot_prices) != len(market_prices):
+            raise typer.BadParameter("Spot prices and market prices must have the same length")
+
+        if len(spot_prices) < 1:
+            raise typer.BadParameter("Spot prices file must contain at least 1 price")
+
+        # Run backtest
+        result = backtest_mispricing(
+            spot_prices=spot_prices,
+            market_option_prices=market_prices,
+            strike=strike,
+            rate=rate,
+            vol=vol,
+            time_to_expiry=time,
+            option_type=type,
+            theoretical_model=model,
+            dividend_yield=dividend,
+            mispricing_threshold=threshold,
+            cost_per_share=cost_per_share,
+            bid_ask_spread_bps=spread_bps,
+            slippage_bps=slippage_bps,
+            impact_factor=impact_factor,
+            simulations=simulations,
+            seed=seed,
+        )
+
+        # Display results
+        table = Table(
+            title="Mispricing Backtest Results",
+            show_header=True,
+            header_style="bold magenta",
+        )
+        table.add_column("Metric", style="cyan")
+        table.add_column("Value", style="green", justify="right")
+
+        table.add_row("Strategy", result.strategy_type.replace("_", "-").title())
+        table.add_row("Model", model.replace("_", "-").title())
+        table.add_row("Initial Value", f"${result.initial_value:.2f}")
+        table.add_row("Final Value", f"${result.final_value:.2f}")
+        table.add_row("Total P&L", f"${result.total_pnl:.2f}")
+        table.add_row("Transaction Costs", f"${result.transaction_costs:.2f}")
+        table.add_row("Slippage Costs", f"${result.slippage_costs:.2f}")
+        table.add_row(
+            "Net P&L", f"${result.total_pnl - result.transaction_costs - result.slippage_costs:.2f}"
+        )
+        table.add_row("Number of Trades", f"{result.num_trades}")
+        table.add_row("Return", f"{result.returns:.2%}")
 
         console.print(table)
 
