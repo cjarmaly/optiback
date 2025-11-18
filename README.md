@@ -67,6 +67,9 @@ Core goals:
 - Composable backtests for hedging and mispricing strategies
 - Ergonomic CLI for quick experiments; Python API for notebooks and research
 
+**Features:**
+- **Vectorized operations**: All pricing functions support both scalar and array inputs for efficient batch processing
+
 ## Installation
 
 ### For Development (Recommended)
