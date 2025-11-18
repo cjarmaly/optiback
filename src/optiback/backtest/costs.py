@@ -12,6 +12,8 @@ def calculate_transaction_cost(
     """
     Calculate transaction cost including commissions and bid-ask spread.
 
+    The cost is always positive regardless of trade direction (buy or sell).
+
     Args:
         trade_size: Number of shares traded (positive for buy, negative for sell)
         price: Execution price per share

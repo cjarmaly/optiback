@@ -34,6 +34,7 @@ def black_scholes_call(
         7.5168
     """
     # Check if inputs are scalar before converting to arrays
+    # Convert to arrays to support vectorized operations (pricing multiple options at once)
     is_scalar = np.isscalar(spot) and np.isscalar(strike)
 
     spot_arr = np.asarray(spot, dtype=np.float64)
