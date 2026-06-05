@@ -29,14 +29,21 @@ def rebalance_periods(rebalance_frequency: str) -> int:
     return mapping[key]
 
 
+def compute_total_return(initial_value: float, final_value: float) -> float:
+    """Compute total return using a stable denominator for negative books."""
+    if initial_value == 0:
+        return 0.0
+    return (final_value - initial_value) / abs(initial_value)
+
+
 def compute_period_returns(equity_curve: np.ndarray) -> np.ndarray:
     """Compute period-over-period returns from an equity curve."""
     if len(equity_curve) < 2:
         return np.array([], dtype=np.float64)
 
     prev = equity_curve[:-1]
-    safe_prev = np.where(prev != 0, prev, np.nan)
-    returns: np.ndarray = np.diff(equity_curve) / safe_prev
+    denom = np.where(np.abs(prev) != 0, np.abs(prev), np.nan)
+    returns: np.ndarray = np.diff(equity_curve) / denom
     cleaned: np.ndarray = np.nan_to_num(returns, nan=0.0).astype(np.float64)
     return cleaned
 
@@ -74,10 +81,7 @@ class BacktestResult:
 
     def __post_init__(self) -> None:
         """Calculate returns and optional analytics from equity curve."""
-        if self.initial_value != 0:
-            self.returns = (self.final_value - self.initial_value) / self.initial_value
-        else:
-            self.returns = 0.0
+        self.returns = compute_total_return(self.initial_value, self.final_value)
 
         if self.equity_curve is not None and len(self.equity_curve) >= 2:
             if self.period_returns is None:

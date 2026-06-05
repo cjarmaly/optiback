@@ -15,6 +15,8 @@ from optiback.backtest.delta_hedge import backtest_delta_hedge
 from optiback.backtest.engine import (
     BacktestResult,
     calculate_sharpe_ratio,
+    compute_period_returns,
+    compute_total_return,
     rebalance_periods,
 )
 from optiback.backtest.mispricing import backtest_mispricing
@@ -397,6 +399,59 @@ class TestBacktestResult:
         )
 
         assert result.returns == 0.0  # Avoid division by zero
+
+    def test_backtest_result_negative_initial_value(self):
+        """Losses on a negative book should report negative returns."""
+        result = BacktestResult(
+            total_pnl=-6.37,
+            transaction_costs=0.17,
+            slippage_costs=0.03,
+            num_trades=123,
+            initial_value=-0.89,
+            final_value=-7.26,
+            returns=0.0,
+            strategy_type="delta_hedge",
+        )
+
+        expected = (-7.26 - (-0.89)) / abs(-0.89)
+        assert result.returns == pytest.approx(expected)
+        assert result.returns < 0
+        assert np.sign(result.returns) == np.sign(result.total_pnl)
+
+
+class TestReturnCalculations:
+    """Test return helpers for negative and positive books."""
+
+    def test_compute_total_return_positive_book(self):
+        assert compute_total_return(1000.0, 1100.0) == pytest.approx(0.1)
+
+    def test_compute_total_return_negative_book_loss(self):
+        assert compute_total_return(-0.89, -7.26) == pytest.approx(-7.157303370786517)
+
+    def test_compute_total_return_negative_book_gain(self):
+        assert compute_total_return(-10.0, -8.0) == pytest.approx(0.2)
+
+    def test_compute_period_returns_negative_book(self):
+        returns = compute_period_returns(np.array([-5.0, -4.0, -6.0]))
+        assert returns[0] == pytest.approx(0.2)
+        assert returns[1] == pytest.approx(-0.5)
+
+    def test_delta_hedge_return_sign_matches_pnl(self):
+        """High-vol short-call hedges can start with a negative book."""
+        rng = np.random.default_rng(42)
+        spot_prices = 115.0 + np.cumsum(rng.normal(0, 3.0, size=60))
+        result = backtest_delta_hedge(
+            spot_prices=spot_prices,
+            strike=115.0,
+            rate=0.04,
+            vol=1.05,
+            time_to_expiry=0.25,
+            option_type="call",
+            option_position=-1.0,
+        )
+
+        if result.initial_value != 0:
+            assert np.sign(result.returns) == np.sign(result.total_pnl)
 
 
 class TestSharpeRatio:
