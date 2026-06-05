@@ -5,6 +5,8 @@ from __future__ import annotations
 import numpy as np
 from scipy.stats import norm
 
+from optiback.pricing.array import as_pricing_result
+
 
 def black_scholes_call(
     spot: float | np.ndarray,
@@ -43,18 +45,14 @@ def black_scholes_call(
     # Handle edge cases
     if time_to_expiry <= 0:
         result = np.maximum(spot_arr - strike_arr, 0.0)
-        if is_scalar:
-            return float(result.item())
-        return result
+        return as_pricing_result(result, is_scalar=is_scalar)
     if vol <= 0:
         result = np.maximum(
             spot_arr * np.exp(-dividend_yield * time_to_expiry)
             - strike_arr * np.exp(-rate * time_to_expiry),
             0.0,
         )
-        if is_scalar:
-            return float(result.item())
-        return result
+        return as_pricing_result(result, is_scalar=is_scalar)
 
     # Black-Scholes formula
     d1 = (
@@ -68,10 +66,7 @@ def black_scholes_call(
         d1
     ) - strike_arr * np.exp(-rate * time_to_expiry) * norm.cdf(d2)
 
-    # Return scalar if inputs were scalar
-    if is_scalar:
-        return float(call_price.item())
-    return call_price
+    return as_pricing_result(call_price, is_scalar=is_scalar)
 
 
 def black_scholes_put(
@@ -126,7 +121,4 @@ def black_scholes_put(
         + strike_arr * np.exp(-rate * time_to_expiry)
     )
 
-    # Return scalar if inputs were scalar
-    if is_scalar:
-        return float(put_price.item())
-    return put_price
+    return as_pricing_result(put_price, is_scalar=is_scalar)

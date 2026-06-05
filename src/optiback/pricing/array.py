@@ -12,6 +12,14 @@ def as_float(value: float | np.ndarray) -> float:
     return float(value) if not isinstance(value, float) else value
 
 
+def as_pricing_result(value: np.ndarray, *, is_scalar: bool) -> float | np.ndarray:
+    """Return a scalar or ndarray matching pricing function signatures."""
+    array_result: np.ndarray = np.asarray(value, dtype=np.float64)
+    if is_scalar:
+        return float(array_result.item())
+    return array_result
+
+
 def map_over_spots(
     scalar_fn: Callable[[float, float], float],
     spot: float | np.ndarray,

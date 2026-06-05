@@ -5,6 +5,8 @@ from __future__ import annotations
 import numpy as np
 from scipy.stats import norm
 
+from optiback.pricing.array import as_pricing_result
+
 
 def _compute_d1_d2(
     spot: np.ndarray,
@@ -83,9 +85,7 @@ def black_scholes_delta(
             result = np.where(spot_arr > strike_arr, 1.0, 0.0)
         else:  # put
             result = np.where(spot_arr < strike_arr, -1.0, 0.0)
-        if is_scalar:
-            return float(result.item())
-        return result
+        return as_pricing_result(result, is_scalar=is_scalar)
 
     if vol <= 0:
         # With zero vol, delta depends on moneyness
@@ -103,9 +103,7 @@ def black_scholes_delta(
                 -1.0,
                 0.0,
             )
-        if is_scalar:
-            return float(result.item())
-        return result
+        return as_pricing_result(result, is_scalar=is_scalar)
 
     # Compute d1 and d2
     d1, _ = _compute_d1_d2(spot_arr, strike_arr, rate, vol, time_to_expiry, dividend_yield)
@@ -121,10 +119,7 @@ def black_scholes_delta(
     else:  # put
         delta = discount_factor * (n_d1 - 1.0)
 
-    # Return scalar if inputs were scalar
-    if is_scalar:
-        return float(delta.item())
-    return delta
+    return as_pricing_result(delta, is_scalar=is_scalar)
 
 
 def black_scholes_gamma(
@@ -167,9 +162,7 @@ def black_scholes_gamma(
     if time_to_expiry <= 0 or vol <= 0:
         # At expiry or with zero vol, gamma is 0 (delta is step function)
         result = np.zeros_like(spot_arr)
-        if is_scalar:
-            return float(result.item())
-        return result
+        return as_pricing_result(result, is_scalar=is_scalar)
 
     # Compute d1
     d1, _ = _compute_d1_d2(spot_arr, strike_arr, rate, vol, time_to_expiry, dividend_yield)
@@ -182,10 +175,7 @@ def black_scholes_gamma(
 
     gamma = (discount_factor * n_prime_d1) / (spot_arr * vol * sqrt_t)
 
-    # Return scalar if inputs were scalar
-    if is_scalar:
-        return float(gamma.item())
-    return gamma
+    return as_pricing_result(gamma, is_scalar=is_scalar)
 
 
 def black_scholes_vega(
@@ -228,16 +218,12 @@ def black_scholes_vega(
     if time_to_expiry <= 0:
         # At expiry, vega is 0 (no time value)
         result = np.zeros_like(spot_arr)
-        if is_scalar:
-            return float(result.item())
-        return result
+        return as_pricing_result(result, is_scalar=is_scalar)
 
     if vol <= 0:
         # With zero vol, vega is 0
         result = np.zeros_like(spot_arr)
-        if is_scalar:
-            return float(result.item())
-        return result
+        return as_pricing_result(result, is_scalar=is_scalar)
 
     # Compute d1
     d1, _ = _compute_d1_d2(spot_arr, strike_arr, rate, vol, time_to_expiry, dividend_yield)
@@ -250,10 +236,7 @@ def black_scholes_vega(
 
     vega = spot_arr * discount_factor * n_prime_d1 * sqrt_t / 100.0
 
-    # Return scalar if inputs were scalar
-    if is_scalar:
-        return float(vega.item())
-    return vega
+    return as_pricing_result(vega, is_scalar=is_scalar)
 
 
 def black_scholes_theta(
@@ -302,16 +285,12 @@ def black_scholes_theta(
     if time_to_expiry <= 0:
         # At expiry, theta is 0 (no more time decay)
         result = np.zeros_like(spot_arr)
-        if is_scalar:
-            return float(result.item())
-        return result
+        return as_pricing_result(result, is_scalar=is_scalar)
 
     if vol <= 0:
         # With zero vol, theta is 0 (no time value decay)
         result = np.zeros_like(spot_arr)
-        if is_scalar:
-            return float(result.item())
-        return result
+        return as_pricing_result(result, is_scalar=is_scalar)
 
     # Compute d1 and d2
     d1, d2 = _compute_d1_d2(spot_arr, strike_arr, rate, vol, time_to_expiry, dividend_yield)
@@ -347,10 +326,7 @@ def black_scholes_theta(
             - dividend_yield * spot_arr * discount_factor_spot * n_neg_d1
         ) / days_per_year
 
-    # Return scalar if inputs were scalar
-    if is_scalar:
-        return float(theta.item())
-    return theta
+    return as_pricing_result(theta, is_scalar=is_scalar)
 
 
 def black_scholes_rho(
@@ -399,16 +375,12 @@ def black_scholes_rho(
     if time_to_expiry <= 0:
         # At expiry, rho is 0 (no time value)
         result = np.zeros_like(spot_arr)
-        if is_scalar:
-            return float(result.item())
-        return result
+        return as_pricing_result(result, is_scalar=is_scalar)
 
     if vol <= 0:
         # With zero vol, rho is 0
         result = np.zeros_like(spot_arr)
-        if is_scalar:
-            return float(result.item())
-        return result
+        return as_pricing_result(result, is_scalar=is_scalar)
 
     # Compute d1 and d2
     d1, d2 = _compute_d1_d2(spot_arr, strike_arr, rate, vol, time_to_expiry, dividend_yield)
@@ -425,10 +397,7 @@ def black_scholes_rho(
         n_neg_d2 = norm.cdf(-d2)
         rho = -strike_arr * time_to_expiry * discount_factor * n_neg_d2 / 100.0
 
-    # Return scalar if inputs were scalar
-    if is_scalar:
-        return float(rho.item())
-    return rho
+    return as_pricing_result(rho, is_scalar=is_scalar)
 
 
 def black_scholes_greeks(
