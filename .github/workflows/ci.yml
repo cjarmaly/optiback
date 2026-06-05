@@ -16,6 +16,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Reject tracked local-only config files
+        run: |
+          tracked="$(git ls-files .gitignore .pre-commit-config.yaml)"
+          if [ -n "$tracked" ]; then
+            echo "::error::.gitignore and .pre-commit-config.yaml must stay local-only and must not be tracked in git."
+            echo "$tracked"
+            exit 1
+          fi
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:

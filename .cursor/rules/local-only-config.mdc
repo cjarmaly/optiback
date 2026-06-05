@@ -1,0 +1,15 @@
+---
+description: Keep .gitignore and .pre-commit-config.yaml local-only; never commit them
+alwaysApply: true
+---
+
+# Local-only config files
+
+`.gitignore` and `.pre-commit-config.yaml` are **local developer files** and must **never** be added, committed, or pushed to the remote repository.
+
+When committing:
+- Do **not** run `git add` on these files.
+- Do **not** use `git add -A` without first verifying they are excluded.
+- If they appear as untracked, leave them untracked.
+
+If a commit accidentally includes them, remove with `git rm --cached .gitignore .pre-commit-config.yaml` and amend only if explicitly requested.
