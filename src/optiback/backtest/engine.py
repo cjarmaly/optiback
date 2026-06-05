@@ -2,10 +2,43 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 import numpy as np
+
+
+def rebalance_periods(rebalance_frequency: str) -> int:
+    """
+    Map a rebalance frequency label to a number of price bars between rebalances.
+
+    Assumes each row in ``spot_prices`` is one bar (e.g. daily). Supported values:
+    ``daily`` (1), ``weekly`` (5), ``monthly`` (21).
+    """
+    mapping = {
+        "daily": 1,
+        "hourly": 1,
+        "weekly": 5,
+        "monthly": 21,
+    }
+    key = rebalance_frequency.lower()
+    if key not in mapping:
+        raise ValueError(
+            f"rebalance_frequency must be one of {list(mapping.keys())}, got '{rebalance_frequency}'"
+        )
+    return mapping[key]
+
+
+def compute_period_returns(equity_curve: np.ndarray) -> np.ndarray:
+    """Compute period-over-period returns from an equity curve."""
+    if len(equity_curve) < 2:
+        return np.array([], dtype=np.float64)
+
+    prev = equity_curve[:-1]
+    safe_prev = np.where(prev != 0, prev, np.nan)
+    returns: np.ndarray = np.diff(equity_curve) / safe_prev
+    cleaned: np.ndarray = np.nan_to_num(returns, nan=0.0).astype(np.float64)
+    return cleaned
 
 
 @dataclass
@@ -22,6 +55,9 @@ class BacktestResult:
         final_value: Final portfolio value
         returns: Total return as a decimal (e.g., 0.05 for 5%)
         strategy_type: Type of strategy ("delta_hedge" or "mispricing")
+        equity_curve: Portfolio value at each period (optional)
+        period_returns: Period-over-period returns derived from equity_curve (optional)
+        sharpe_ratio: Annualized Sharpe ratio from period_returns (optional)
     """
 
     total_pnl: float
@@ -32,15 +68,24 @@ class BacktestResult:
     final_value: float
     returns: float
     strategy_type: Literal["delta_hedge", "mispricing"]
+    equity_curve: np.ndarray | None = field(default=None, repr=False)
+    period_returns: np.ndarray | None = field(default=None, repr=False)
+    sharpe_ratio: float | None = None
 
     def __post_init__(self) -> None:
-        """Calculate returns from initial and final values."""
+        """Calculate returns and optional analytics from equity curve."""
         if self.initial_value != 0:
             self.returns = (self.final_value - self.initial_value) / self.initial_value
         else:
             self.returns = 0.0
 
-    def summary(self) -> dict[str, float | int | str]:
+        if self.equity_curve is not None and len(self.equity_curve) >= 2:
+            if self.period_returns is None:
+                self.period_returns = compute_period_returns(self.equity_curve)
+            if self.sharpe_ratio is None and len(self.period_returns) > 0:
+                self.sharpe_ratio = calculate_sharpe_ratio(self.period_returns)
+
+    def summary(self) -> dict[str, float | int | str | None]:
         """Return a summary dictionary of backtest results."""
         return {
             "strategy": self.strategy_type,
@@ -53,6 +98,7 @@ class BacktestResult:
             "final_value": self.final_value,
             "returns": self.returns,
             "returns_pct": self.returns * 100,
+            "sharpe_ratio": self.sharpe_ratio,
         }
 
 

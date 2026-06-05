@@ -54,7 +54,7 @@ def black_scholes_call(
         )
         if is_scalar:
             return float(result.item())
-        return result  # type: ignore[no-any-return]
+        return result
 
     # Black-Scholes formula
     d1 = (
@@ -71,7 +71,7 @@ def black_scholes_call(
     # Return scalar if inputs were scalar
     if is_scalar:
         return float(call_price.item())
-    return call_price  # type: ignore[no-any-return]
+    return call_price
 
 
 def black_scholes_put(
@@ -129,4 +129,4 @@ def black_scholes_put(
     # Return scalar if inputs were scalar
     if is_scalar:
         return float(put_price.item())
-    return put_price  # type: ignore[no-any-return]
+    return put_price

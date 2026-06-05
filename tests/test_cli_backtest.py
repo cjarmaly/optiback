@@ -2,7 +2,9 @@
 
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
+import pandas as pd
 from typer.testing import CliRunner
 
 from optiback.cli.optiback import app
@@ -594,3 +596,55 @@ class TestMispricingCLI:
         finally:
             Path(spot_file).unlink()
             Path(market_file).unlink()
+
+
+class TestBacktestDataSources:
+    """Test ticker and validation for backtest CLI commands."""
+
+    def test_backtest_delta_hedge_missing_data_source(self):
+        result = runner.invoke(
+            app,
+            [
+                "backtest-delta-hedge",
+                "--strike",
+                "100.0",
+                "--rate",
+                "0.02",
+                "--vol",
+                "0.25",
+                "--time",
+                "0.25",
+                "--type",
+                "call",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "spot-file" in result.stderr.lower() or "ticker" in result.stderr.lower()
+
+    @patch("optiback.cli.helpers.fetch_spot_history")
+    def test_backtest_delta_hedge_with_ticker(self, mock_fetch):
+        mock_fetch.return_value = pd.Series(
+            [100.0, 101.0, 99.0, 102.0, 100.0],
+            index=pd.date_range("2024-01-01", periods=5),
+        )
+        result = runner.invoke(
+            app,
+            [
+                "backtest-delta-hedge",
+                "--ticker",
+                "SPY",
+                "--strike",
+                "100.0",
+                "--rate",
+                "0.02",
+                "--vol",
+                "0.25",
+                "--time",
+                "0.25",
+                "--type",
+                "call",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "Sharpe Ratio" in result.stdout
+        mock_fetch.assert_called_once()

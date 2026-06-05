@@ -1,16 +1,23 @@
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-import numpy as np
 import typer
-from rich.console import Console
-from rich.table import Table
 
-from optiback.backtest import (
-    backtest_delta_hedge,
-    backtest_mispricing,
+from optiback.backtest import backtest_delta_hedge, backtest_mispricing
+from optiback.cli.helpers import (
+    PRICING_MODELS,
+    add_common_option_rows,
+    console,
+    display_backtest_result,
+    load_prices_array,
+    make_table,
+    resolve_spot_prices,
+    run_command,
+    validate_non_negative,
+    validate_option_type,
+    validate_positive,
+    validate_pricing_inputs,
+    validate_simulations,
+    validate_steps,
 )
 from optiback.pricing import (
     binomial_tree_call,
@@ -24,646 +31,403 @@ from optiback.pricing import (
 )
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
-console = Console()
 
 
 @app.callback()
-def cli_callback():
-    """
-    OptiBack: Options pricing & backtesting toolkit.
-    """
+def cli_callback() -> None:
+    """OptiBack: Options pricing and backtesting toolkit."""
 
 
 @app.command("version")
-def version():
+def version() -> None:
     console.print("[bold green]OptiBack[/] 0.1.0")
 
 
-def validate_positive(value: float, param_name: str) -> float:
-    """Validate that a value is positive."""
-    if value <= 0:
-        raise typer.BadParameter(f"{param_name} must be greater than 0, got {value}")
-    return value
+def _price_black_scholes(option_type: str, **kwargs: float) -> float:
+    func = black_scholes_call if option_type == "call" else black_scholes_put
+    return float(func(**kwargs))
 
 
-def validate_non_negative(value: float, param_name: str) -> float:
-    """Validate that a value is non-negative."""
-    if value < 0:
-        raise typer.BadParameter(f"{param_name} must be >= 0, got {value}")
-    return value
+def _price_binomial(option_type: str, steps: int, **kwargs: float) -> float:
+    func = binomial_tree_call if option_type == "call" else binomial_tree_put
+    return float(func(steps=steps, **kwargs))
 
 
-def validate_option_type(option_type: str) -> str:
-    """Validate that option type is 'call' or 'put'."""
-    option_type_lower = option_type.lower()
-    if option_type_lower not in ("call", "put"):
-        raise typer.BadParameter(f"Option type must be 'call' or 'put', got '{option_type}'")
-    return option_type_lower
-
-
-def validate_steps(steps: int) -> int:
-    """Validate that steps is a positive integer."""
-    if steps <= 0:
-        raise typer.BadParameter(f"steps must be greater than 0, got {steps}")
-    return steps
-
-
-def validate_simulations(simulations: int) -> int:
-    """Validate that simulations is a positive integer."""
-    if simulations <= 0:
-        raise typer.BadParameter(f"simulations must be greater than 0, got {simulations}")
-    return simulations
+def _price_monte_carlo(
+    option_type: str,
+    simulations: int,
+    seed: int | None,
+    **kwargs: float,
+) -> float:
+    func = monte_carlo_call if option_type == "call" else monte_carlo_put
+    return float(func(simulations=simulations, seed=seed, **kwargs))
 
 
 @app.command("price")
 def price(
-    spot: float = typer.Option(..., help="Current spot price of the underlying asset"),
-    strike: float = typer.Option(..., help="Strike price of the option"),
-    rate: float = typer.Option(..., help="Risk-free interest rate (annualized)"),
-    vol: float = typer.Option(..., help="Volatility of the underlying asset (annualized)"),
-    time: float = typer.Option(..., help="Time to expiration in years"),
-    type: str = typer.Option(..., help="Option type: 'call' or 'put'"),
-    dividend: float = typer.Option(0.0, help="Dividend yield (annualized, default: 0.0)"),
+    spot: float = typer.Option(..., help="Current spot price"),
+    strike: float = typer.Option(..., help="Strike price"),
+    rate: float = typer.Option(..., help="Risk-free rate (annualized)"),
+    vol: float = typer.Option(..., help="Volatility (annualized)"),
+    time: float = typer.Option(..., help="Time to expiry in years"),
+    type: str = typer.Option(..., help="Option type: call or put"),
+    dividend: float = typer.Option(0.0, help="Dividend yield (annualized)"),
 ) -> None:
-    """
-    Price an option using the Black-Scholes model.
+    """Price a European option with Black-Scholes."""
 
-    Examples:
-        optiback price --spot 100 --strike 100 --rate 0.02 --vol 0.25 --time 0.5 --type call
-        optiback price --spot 100 --strike 100 --rate 0.02 --vol 0.25 --time 0.5 --type put --dividend 0.01
-    """
-    # Validate inputs
-    spot = validate_positive(spot, "Spot price")
-    strike = validate_positive(strike, "Strike price")
-    vol = validate_non_negative(vol, "Volatility")
-    time = validate_non_negative(time, "Time to expiry")
-    type = validate_option_type(type)
-    dividend = validate_non_negative(dividend, "Dividend yield")
-
-    # Calculate option price
-    try:
-        if type == "call":
-            price_value = black_scholes_call(
-                spot=spot,
-                strike=strike,
-                rate=rate,
-                vol=vol,
-                time_to_expiry=time,
-                dividend_yield=dividend,
-            )
-        else:  # put
-            price_value = black_scholes_put(
-                spot=spot,
-                strike=strike,
-                rate=rate,
-                vol=vol,
-                time_to_expiry=time,
-                dividend_yield=dividend,
-            )
-
-        # Display results in a formatted table
-        table = Table(title="Option Pricing Results", show_header=True, header_style="bold magenta")
-        table.add_column("Parameter", style="cyan")
-        table.add_column("Value", style="green", justify="right")
-
-        table.add_row("Option Type", type.capitalize())
-        table.add_row("Spot Price", f"{spot:.2f}")
-        table.add_row("Strike Price", f"{strike:.2f}")
-        table.add_row("Risk-Free Rate", f"{rate:.2%}")
-        table.add_row("Volatility", f"{vol:.2%}")
-        table.add_row("Time to Expiry", f"{time:.4f} years")
-        if dividend > 0:
-            table.add_row("Dividend Yield", f"{dividend:.2%}")
-        table.add_row("", "")  # Empty row for spacing
+    def action() -> None:
+        spot_v, strike_v, vol_v, time_v, option_type, dividend_v = validate_pricing_inputs(
+            spot, strike, vol, time, type, dividend
+        )
+        price_value = _price_black_scholes(
+            option_type,
+            spot=spot_v,
+            strike=strike_v,
+            rate=rate,
+            vol=vol_v,
+            time_to_expiry=time_v,
+            dividend_yield=dividend_v,
+        )
+        table = make_table("Option Pricing Results")
+        add_common_option_rows(
+            table,
+            option_type=option_type,
+            spot=spot_v,
+            strike=strike_v,
+            rate=rate,
+            vol=vol_v,
+            time=time_v,
+            dividend=dividend_v,
+        )
+        table.add_row("", "")
         table.add_row("[bold]Option Price[/]", f"[bold green]{price_value:.4f}[/]")
-
         console.print(table)
 
-    except Exception as e:
-        error_console = Console(file=sys.stderr)
-        error_console.print(f"[bold red]Error:[/] {e}")
-        raise typer.Exit(1) from e
+    run_command(action)
 
 
 @app.command("greeks")
 def greeks(
-    spot: float = typer.Option(..., help="Current spot price of the underlying asset"),
-    strike: float = typer.Option(..., help="Strike price of the option"),
-    rate: float = typer.Option(..., help="Risk-free interest rate (annualized)"),
-    vol: float = typer.Option(..., help="Volatility of the underlying asset (annualized)"),
-    time: float = typer.Option(..., help="Time to expiration in years"),
-    type: str = typer.Option(..., help="Option type: 'call' or 'put'"),
-    dividend: float = typer.Option(0.0, help="Dividend yield (annualized, default: 0.0)"),
+    spot: float = typer.Option(..., help="Current spot price"),
+    strike: float = typer.Option(..., help="Strike price"),
+    rate: float = typer.Option(..., help="Risk-free rate (annualized)"),
+    vol: float = typer.Option(..., help="Volatility (annualized)"),
+    time: float = typer.Option(..., help="Time to expiry in years"),
+    type: str = typer.Option(..., help="Option type: call or put"),
+    dividend: float = typer.Option(0.0, help="Dividend yield (annualized)"),
 ) -> None:
-    """
-    Calculate all Greeks (Delta, Gamma, Vega, Theta, Rho) for an option.
+    """Calculate Black-Scholes Greeks."""
 
-    Examples:
-        optiback greeks --spot 100 --strike 100 --rate 0.02 --vol 0.25 --time 0.5 --type call
-        optiback greeks --spot 100 --strike 100 --rate 0.02 --vol 0.25 --time 0.5 --type put --dividend 0.01
-    """
-    # Validate inputs
-    spot = validate_positive(spot, "Spot price")
-    strike = validate_positive(strike, "Strike price")
-    vol = validate_non_negative(vol, "Volatility")
-    time = validate_non_negative(time, "Time to expiry")
-    type = validate_option_type(type)
-    dividend = validate_non_negative(dividend, "Dividend yield")
-
-    # Calculate all Greeks
-    try:
-        greeks_dict = black_scholes_greeks(
-            spot=spot,
-            strike=strike,
-            rate=rate,
-            vol=vol,
-            time_to_expiry=time,
-            option_type=type,
-            dividend_yield=dividend,
+    def action() -> None:
+        spot_v, strike_v, vol_v, time_v, option_type, dividend_v = validate_pricing_inputs(
+            spot, strike, vol, time, type, dividend
         )
-
-        # Display results in a formatted table
-        table = Table(title="Option Greeks", show_header=True, header_style="bold magenta")
-        table.add_column("Parameter", style="cyan")
-        table.add_column("Value", style="green", justify="right")
-
-        table.add_row("Option Type", type.capitalize())
-        table.add_row("Spot Price", f"{spot:.2f}")
-        table.add_row("Strike Price", f"{strike:.2f}")
-        table.add_row("Risk-Free Rate", f"{rate:.2%}")
-        table.add_row("Volatility", f"{vol:.2%}")
-        table.add_row("Time to Expiry", f"{time:.4f} years")
-        if dividend > 0:
-            table.add_row("Dividend Yield", f"{dividend:.2%}")
-        table.add_row("", "")  # Empty row for spacing
-        table.add_row("[bold]Delta (Δ)[/]", f"[bold green]{greeks_dict['delta']:.4f}[/]")
-        table.add_row("[bold]Gamma (Γ)[/]", f"[bold green]{greeks_dict['gamma']:.4f}[/]")
-        table.add_row("[bold]Vega (ν)[/]", f"[bold green]{greeks_dict['vega']:.4f}[/]")
-        table.add_row("[bold]Theta (Θ)[/]", f"[bold green]{greeks_dict['theta']:.4f}[/]")
-        table.add_row("[bold]Rho (ρ)[/]", f"[bold green]{greeks_dict['rho']:.4f}[/]")
-
+        values = black_scholes_greeks(
+            spot=spot_v,
+            strike=strike_v,
+            rate=rate,
+            vol=vol_v,
+            time_to_expiry=time_v,
+            option_type=option_type,
+            dividend_yield=dividend_v,
+        )
+        table = make_table("Option Greeks")
+        add_common_option_rows(
+            table,
+            option_type=option_type,
+            spot=spot_v,
+            strike=strike_v,
+            rate=rate,
+            vol=vol_v,
+            time=time_v,
+            dividend=dividend_v,
+        )
+        table.add_row("", "")
+        labels = {
+            "delta": "Delta (Δ)",
+            "gamma": "Gamma (Γ)",
+            "vega": "Vega (ν)",
+            "theta": "Theta (Θ)",
+            "rho": "Rho (ρ)",
+        }
+        for key, label in labels.items():
+            table.add_row(f"[bold]{label}[/]", f"[bold green]{values[key]:.4f}[/]")
         console.print(table)
 
-    except Exception as e:
-        error_console = Console(file=sys.stderr)
-        error_console.print(f"[bold red]Error:[/] {e}")
-        raise typer.Exit(1) from e
+    run_command(action)
 
 
 @app.command("implied-vol")
 def implied_vol(
-    spot: float = typer.Option(..., help="Current spot price of the underlying asset"),
-    strike: float = typer.Option(..., help="Strike price of the option"),
-    rate: float = typer.Option(..., help="Risk-free interest rate (annualized)"),
-    time: float = typer.Option(..., help="Time to expiration in years"),
-    price: float = typer.Option(..., help="Observed market price of the option"),
-    type: str = typer.Option(..., help="Option type: 'call' or 'put'"),
-    dividend: float = typer.Option(0.0, help="Dividend yield (annualized, default: 0.0)"),
+    spot: float = typer.Option(..., help="Current spot price"),
+    strike: float = typer.Option(..., help="Strike price"),
+    rate: float = typer.Option(..., help="Risk-free rate (annualized)"),
+    time: float = typer.Option(..., help="Time to expiry in years"),
+    price: float = typer.Option(..., help="Observed market price"),
+    type: str = typer.Option(..., help="Option type: call or put"),
+    dividend: float = typer.Option(0.0, help="Dividend yield (annualized)"),
 ) -> None:
-    """
-    Calculate implied volatility from market price using Black-Scholes model.
+    """Infer implied volatility from a market price."""
 
-    Examples:
-        optiback implied-vol --spot 100 --strike 100 --rate 0.02 --time 0.5 --price 7.5168 --type call
-        optiback implied-vol --spot 100 --strike 100 --rate 0.02 --time 0.5 --price 6.5218 --type put --dividend 0.01
-    """
-    # Validate inputs
-    spot = validate_positive(spot, "Spot price")
-    strike = validate_positive(strike, "Strike price")
-    time = validate_non_negative(time, "Time to expiry")
-    price = validate_non_negative(price, "Market price")
-    type = validate_option_type(type)
-    dividend = validate_non_negative(dividend, "Dividend yield")
+    def action() -> None:
+        spot_v = validate_positive(spot, "Spot price")
+        strike_v = validate_positive(strike, "Strike price")
+        time_v = validate_non_negative(time, "Time to expiry")
+        market_price = validate_non_negative(price, "Market price")
+        option_type = validate_option_type(type)
+        dividend_v = validate_non_negative(dividend, "Dividend yield")
 
-    # Calculate implied volatility
-    try:
-        implied_vol_value = black_scholes_implied_volatility(
-            spot=spot,
-            strike=strike,
+        implied = black_scholes_implied_volatility(
+            spot=spot_v,
+            strike=strike_v,
             rate=rate,
-            time_to_expiry=time,
-            market_price=price,
-            option_type=type,
-            dividend_yield=dividend,
+            time_to_expiry=time_v,
+            market_price=market_price,
+            option_type=option_type,
+            dividend_yield=dividend_v,
         )
-
-        # Display results in a formatted table
-        table = Table(title="Implied Volatility", show_header=True, header_style="bold magenta")
-        table.add_column("Parameter", style="cyan")
-        table.add_column("Value", style="green", justify="right")
-
-        table.add_row("Option Type", type.capitalize())
-        table.add_row("Spot Price", f"{spot:.2f}")
-        table.add_row("Strike Price", f"{strike:.2f}")
-        table.add_row("Risk-Free Rate", f"{rate:.2%}")
-        table.add_row("Time to Expiry", f"{time:.4f} years")
-        if dividend > 0:
-            table.add_row("Dividend Yield", f"{dividend:.2%}")
-        table.add_row("Market Price", f"{price:.4f}")
-        table.add_row("", "")  # Empty row for spacing
+        table = make_table("Implied Volatility")
+        add_common_option_rows(
+            table,
+            option_type=option_type,
+            spot=spot_v,
+            strike=strike_v,
+            rate=rate,
+            vol=None,
+            time=time_v,
+            dividend=dividend_v,
+        )
+        table.add_row("Market Price", f"{market_price:.4f}")
+        table.add_row("", "")
         table.add_row(
             "[bold]Implied Volatility[/]",
-            f"[bold green]{implied_vol_value:.4f}[/] ({implied_vol_value:.2%})",
+            f"[bold green]{implied:.4f}[/] ({implied:.2%})",
         )
-
         console.print(table)
 
-    except Exception as e:
-        error_console = Console(file=sys.stderr)
-        error_console.print(f"[bold red]Error:[/] {e}")
-        raise typer.Exit(1) from e
+    run_command(action)
 
 
 @app.command("price-binomial")
 def price_binomial(
-    spot: float = typer.Option(..., help="Current spot price of the underlying asset"),
-    strike: float = typer.Option(..., help="Strike price of the option"),
-    rate: float = typer.Option(..., help="Risk-free interest rate (annualized)"),
-    vol: float = typer.Option(..., help="Volatility of the underlying asset (annualized)"),
-    time: float = typer.Option(..., help="Time to expiration in years"),
-    type: str = typer.Option(..., help="Option type: 'call' or 'put'"),
-    dividend: float = typer.Option(0.0, help="Dividend yield (annualized, default: 0.0)"),
-    steps: int = typer.Option(100, help="Number of time steps in the binomial tree (default: 100)"),
+    spot: float = typer.Option(..., help="Current spot price"),
+    strike: float = typer.Option(..., help="Strike price"),
+    rate: float = typer.Option(..., help="Risk-free rate (annualized)"),
+    vol: float = typer.Option(..., help="Volatility (annualized)"),
+    time: float = typer.Option(..., help="Time to expiry in years"),
+    type: str = typer.Option(..., help="Option type: call or put"),
+    dividend: float = typer.Option(0.0, help="Dividend yield (annualized)"),
+    steps: int = typer.Option(100, help="Binomial tree steps"),
 ) -> None:
-    """
-    Price an American option using the Binomial Tree model (CRR).
+    """Price an American option with a binomial tree."""
 
-    Examples:
-        optiback price-binomial --spot 100 --strike 100 --rate 0.02 --vol 0.25 --time 0.5 --type call
-        optiback price-binomial --spot 100 --strike 100 --rate 0.02 --vol 0.25 --time 0.5 --type put --dividend 0.01 --steps 200
-    """
-    # Validate inputs
-    spot = validate_positive(spot, "Spot price")
-    strike = validate_positive(strike, "Strike price")
-    vol = validate_non_negative(vol, "Volatility")
-    time = validate_non_negative(time, "Time to expiry")
-    type = validate_option_type(type)
-    dividend = validate_non_negative(dividend, "Dividend yield")
-    steps = validate_steps(steps)
-
-    # Calculate option price
-    try:
-        if type == "call":
-            price_value = binomial_tree_call(
-                spot=spot,
-                strike=strike,
-                rate=rate,
-                vol=vol,
-                time_to_expiry=time,
-                dividend_yield=dividend,
-                steps=steps,
-            )
-        else:  # put
-            price_value = binomial_tree_put(
-                spot=spot,
-                strike=strike,
-                rate=rate,
-                vol=vol,
-                time_to_expiry=time,
-                dividend_yield=dividend,
-                steps=steps,
-            )
-
-        # Display results in a formatted table
-        table = Table(
-            title="Binomial Tree Option Pricing Results",
-            show_header=True,
-            header_style="bold magenta",
+    def action() -> None:
+        spot_v, strike_v, vol_v, time_v, option_type, dividend_v = validate_pricing_inputs(
+            spot, strike, vol, time, type, dividend
         )
-        table.add_column("Parameter", style="cyan")
-        table.add_column("Value", style="green", justify="right")
-
-        table.add_row("Option Type", type.capitalize())
-        table.add_row("Spot Price", f"{spot:.2f}")
-        table.add_row("Strike Price", f"{strike:.2f}")
-        table.add_row("Risk-Free Rate", f"{rate:.2%}")
-        table.add_row("Volatility", f"{vol:.2%}")
-        table.add_row("Time to Expiry", f"{time:.4f} years")
-        if dividend > 0:
-            table.add_row("Dividend Yield", f"{dividend:.2%}")
-        table.add_row("Steps", f"{steps}")
-        table.add_row("", "")  # Empty row for spacing
+        steps_v = validate_steps(steps)
+        price_value = _price_binomial(
+            option_type,
+            steps_v,
+            spot=spot_v,
+            strike=strike_v,
+            rate=rate,
+            vol=vol_v,
+            time_to_expiry=time_v,
+            dividend_yield=dividend_v,
+        )
+        table = make_table("Binomial Tree Option Pricing Results")
+        add_common_option_rows(
+            table,
+            option_type=option_type,
+            spot=spot_v,
+            strike=strike_v,
+            rate=rate,
+            vol=vol_v,
+            time=time_v,
+            dividend=dividend_v,
+        )
+        table.add_row("Steps", str(steps_v))
+        table.add_row("", "")
         table.add_row("[bold]Option Price[/]", f"[bold green]{price_value:.4f}[/]")
-
         console.print(table)
 
-    except Exception as e:
-        error_console = Console(file=sys.stderr)
-        error_console.print(f"[bold red]Error:[/] {e}")
-        raise typer.Exit(1) from e
+    run_command(action)
 
 
 @app.command("price-montecarlo")
 def price_montecarlo(
-    spot: float = typer.Option(..., help="Current spot price of the underlying asset"),
-    strike: float = typer.Option(..., help="Strike price of the option"),
-    rate: float = typer.Option(..., help="Risk-free interest rate (annualized)"),
-    vol: float = typer.Option(..., help="Volatility of the underlying asset (annualized)"),
-    time: float = typer.Option(..., help="Time to expiration in years"),
-    type: str = typer.Option(..., help="Option type: 'call' or 'put'"),
-    dividend: float = typer.Option(0.0, help="Dividend yield (annualized, default: 0.0)"),
-    simulations: int = typer.Option(
-        100000, help="Number of Monte Carlo simulations (default: 100000)"
-    ),
-    seed: int | None = typer.Option(None, help="Random seed for reproducibility (optional)"),
+    spot: float = typer.Option(..., help="Current spot price"),
+    strike: float = typer.Option(..., help="Strike price"),
+    rate: float = typer.Option(..., help="Risk-free rate (annualized)"),
+    vol: float = typer.Option(..., help="Volatility (annualized)"),
+    time: float = typer.Option(..., help="Time to expiry in years"),
+    type: str = typer.Option(..., help="Option type: call or put"),
+    dividend: float = typer.Option(0.0, help="Dividend yield (annualized)"),
+    simulations: int = typer.Option(100_000, help="Number of simulations"),
+    seed: int | None = typer.Option(None, help="Random seed"),
 ) -> None:
-    """
-    Price a European option using Monte Carlo simulation.
+    """Price a European option with Monte Carlo simulation."""
 
-    Examples:
-        optiback price-montecarlo --spot 100 --strike 100 --rate 0.02 --vol 0.25 --time 0.5 --type call
-        optiback price-montecarlo --spot 100 --strike 100 --rate 0.02 --vol 0.25 --time 0.5 --type put --simulations 200000 --seed 42
-    """
-    # Validate inputs
-    spot = validate_positive(spot, "Spot price")
-    strike = validate_positive(strike, "Strike price")
-    vol = validate_non_negative(vol, "Volatility")
-    time = validate_non_negative(time, "Time to expiry")
-    type = validate_option_type(type)
-    dividend = validate_non_negative(dividend, "Dividend yield")
-    simulations = validate_simulations(simulations)
-
-    # Calculate option price
-    try:
-        if type == "call":
-            price_value = monte_carlo_call(
-                spot=spot,
-                strike=strike,
-                rate=rate,
-                vol=vol,
-                time_to_expiry=time,
-                dividend_yield=dividend,
-                simulations=simulations,
-                seed=seed,
-            )
-        else:  # put
-            price_value = monte_carlo_put(
-                spot=spot,
-                strike=strike,
-                rate=rate,
-                vol=vol,
-                time_to_expiry=time,
-                dividend_yield=dividend,
-                simulations=simulations,
-                seed=seed,
-            )
-
-        # Display results in a formatted table
-        table = Table(
-            title="Monte Carlo Option Pricing Results",
-            show_header=True,
-            header_style="bold magenta",
+    def action() -> None:
+        spot_v, strike_v, vol_v, time_v, option_type, dividend_v = validate_pricing_inputs(
+            spot, strike, vol, time, type, dividend
         )
-        table.add_column("Parameter", style="cyan")
-        table.add_column("Value", style="green", justify="right")
-
-        table.add_row("Option Type", type.capitalize())
-        table.add_row("Spot Price", f"{spot:.2f}")
-        table.add_row("Strike Price", f"{strike:.2f}")
-        table.add_row("Risk-Free Rate", f"{rate:.2%}")
-        table.add_row("Volatility", f"{vol:.2%}")
-        table.add_row("Time to Expiry", f"{time:.4f} years")
-        if dividend > 0:
-            table.add_row("Dividend Yield", f"{dividend:.2%}")
-        table.add_row("Simulations", f"{simulations:,}")
+        simulations_v = validate_simulations(simulations)
+        price_value = _price_monte_carlo(
+            option_type,
+            simulations_v,
+            seed,
+            spot=spot_v,
+            strike=strike_v,
+            rate=rate,
+            vol=vol_v,
+            time_to_expiry=time_v,
+            dividend_yield=dividend_v,
+        )
+        table = make_table("Monte Carlo Option Pricing Results")
+        add_common_option_rows(
+            table,
+            option_type=option_type,
+            spot=spot_v,
+            strike=strike_v,
+            rate=rate,
+            vol=vol_v,
+            time=time_v,
+            dividend=dividend_v,
+        )
+        table.add_row("Simulations", f"{simulations_v:,}")
         if seed is not None:
-            table.add_row("Seed", f"{seed}")
-        table.add_row("", "")  # Empty row for spacing
+            table.add_row("Seed", str(seed))
+        table.add_row("", "")
         table.add_row("[bold]Option Price[/]", f"[bold green]{price_value:.4f}[/]")
-
         console.print(table)
 
-    except Exception as e:
-        error_console = Console(file=sys.stderr)
-        error_console.print(f"[bold red]Error:[/] {e}")
-        raise typer.Exit(1) from e
-
-
-def load_prices_from_file(file_path: str) -> np.ndarray:
-    """Load prices from a CSV or text file."""
-    path = Path(file_path)
-    if not path.exists():
-        raise typer.BadParameter(f"File not found: {file_path}")
-
-    try:
-        # Try loading as CSV first
-        prices = np.loadtxt(file_path, delimiter=",", dtype=float)
-        # Flatten if 2D array (single column)
-        if prices.ndim > 1:
-            prices = prices.flatten()
-        return prices
-    except Exception as e:
-        raise typer.BadParameter(f"Error loading prices from {file_path}: {e}") from e
+    run_command(action)
 
 
 @app.command("backtest-delta-hedge")
 def backtest_delta_hedge_cli(
-    spot_file: str = typer.Option(
-        ..., help="Path to file containing spot prices (CSV or space-separated)"
-    ),
-    strike: float = typer.Option(..., help="Strike price of the option"),
-    rate: float = typer.Option(..., help="Risk-free interest rate (annualized)"),
-    vol: float = typer.Option(..., help="Volatility of the underlying asset (annualized)"),
-    time: float = typer.Option(..., help="Time to expiration in years"),
-    type: str = typer.Option(..., help="Option type: 'call' or 'put'"),
-    option_position: float = typer.Option(
-        -1.0, help="Option position size (negative = short, default: -1.0)"
-    ),
-    dividend: float = typer.Option(0.0, help="Dividend yield (annualized, default: 0.0)"),
-    cost_per_share: float = typer.Option(0.01, help="Transaction cost per share (default: $0.01)"),
-    spread_bps: float = typer.Option(5.0, help="Bid-ask spread in basis points (default: 5.0)"),
-    slippage_bps: float = typer.Option(5.0, help="Slippage in basis points (default: 5.0)"),
-    impact_factor: float = typer.Option(0.1, help="Market impact factor (default: 0.1)"),
+    spot_file: str | None = typer.Option(None, help="Spot price file (CSV, Parquet, or text)"),
+    ticker: str | None = typer.Option(None, help="Ticker symbol (alternative to --spot-file)"),
+    start: str | None = typer.Option(None, help="Start date for --ticker (YYYY-MM-DD)"),
+    end: str | None = typer.Option(None, help="End date for --ticker (YYYY-MM-DD)"),
+    period: str | None = typer.Option("3mo", help="yfinance period for --ticker"),
+    strike: float = typer.Option(..., help="Strike price"),
+    rate: float = typer.Option(..., help="Risk-free rate (annualized)"),
+    vol: float = typer.Option(..., help="Volatility (annualized)"),
+    time: float = typer.Option(..., help="Time to expiry in years"),
+    type: str = typer.Option(..., help="Option type: call or put"),
+    option_position: float = typer.Option(-1.0, help="Option position (negative = short)"),
+    rebalance_frequency: str = typer.Option("daily", help="daily, weekly, or monthly"),
+    dividend: float = typer.Option(0.0, help="Dividend yield (annualized)"),
+    cost_per_share: float = typer.Option(0.01, help="Transaction cost per share"),
+    spread_bps: float = typer.Option(5.0, help="Bid-ask spread in basis points"),
+    slippage_bps: float = typer.Option(5.0, help="Slippage in basis points"),
+    impact_factor: float = typer.Option(0.1, help="Market impact factor"),
+    output_csv: str | None = typer.Option(None, help="Save equity curve to CSV"),
 ) -> None:
-    """
-    Backtest a delta-hedged option position.
+    """Backtest a delta-hedged option position."""
 
-    Simulates maintaining a delta-neutral portfolio by rebalancing stock positions
-    as the option's delta changes over time. Accounts for transaction costs, slippage,
-    and discrete rebalancing.
-
-    Examples:
-        optiback backtest-delta-hedge --spot-file prices.csv --strike 100 --rate 0.02 --vol 0.25 --time 0.25 --type call
-    """
-    # Validate inputs (file path will be validated in load_prices_from_file)
-    strike = validate_positive(strike, "Strike price")
-    vol = validate_non_negative(vol, "Volatility")
-    time = validate_non_negative(time, "Time to expiry")
-    type = validate_option_type(type)
-    dividend = validate_non_negative(dividend, "Dividend yield")
-    cost_per_share = validate_non_negative(cost_per_share, "Cost per share")
-    spread_bps = validate_non_negative(spread_bps, "Spread")
-    slippage_bps = validate_non_negative(slippage_bps, "Slippage")
-    impact_factor = validate_non_negative(impact_factor, "Impact factor")
-
-    try:
-        # Load spot prices from file
-        spot_prices = load_prices_from_file(spot_file)
-
-        if len(spot_prices) < 2:
-            raise typer.BadParameter("Spot prices file must contain at least 2 prices")
-
-        # Run backtest
+    def action() -> None:
+        option_type = validate_option_type(type)
+        fetch_period = period if start is None or end is None else None
+        spot_prices = resolve_spot_prices(spot_file, ticker, start, end, fetch_period, min_prices=2)
         result = backtest_delta_hedge(
             spot_prices=spot_prices,
-            strike=strike,
+            strike=validate_positive(strike, "Strike price"),
             rate=rate,
-            vol=vol,
-            time_to_expiry=time,
-            option_type=type,
+            vol=validate_non_negative(vol, "Volatility"),
+            time_to_expiry=validate_non_negative(time, "Time to expiry"),
+            option_type=option_type,
             option_position=option_position,
-            dividend_yield=dividend,
-            cost_per_share=cost_per_share,
-            bid_ask_spread_bps=spread_bps,
-            slippage_bps=slippage_bps,
-            impact_factor=impact_factor,
+            rebalance_frequency=rebalance_frequency,
+            dividend_yield=validate_non_negative(dividend, "Dividend yield"),
+            cost_per_share=validate_non_negative(cost_per_share, "Cost per share"),
+            bid_ask_spread_bps=validate_non_negative(spread_bps, "Spread"),
+            slippage_bps=validate_non_negative(slippage_bps, "Slippage"),
+            impact_factor=validate_non_negative(impact_factor, "Impact factor"),
         )
-
-        # Display results
-        table = Table(
+        display_backtest_result(
+            result,
             title="Delta-Hedge Backtest Results",
-            show_header=True,
-            header_style="bold magenta",
+            extra_rows=[("Rebalance Freq", rebalance_frequency.title())],
+            output_csv=output_csv,
         )
-        table.add_column("Metric", style="cyan")
-        table.add_column("Value", style="green", justify="right")
 
-        table.add_row("Strategy", result.strategy_type.replace("_", "-").title())
-        table.add_row("Initial Value", f"${result.initial_value:.2f}")
-        table.add_row("Final Value", f"${result.final_value:.2f}")
-        table.add_row("Total P&L", f"${result.total_pnl:.2f}")
-        table.add_row("Transaction Costs", f"${result.transaction_costs:.2f}")
-        table.add_row("Slippage Costs", f"${result.slippage_costs:.2f}")
-        table.add_row(
-            "Net P&L", f"${result.total_pnl - result.transaction_costs - result.slippage_costs:.2f}"
-        )
-        table.add_row("Number of Trades", f"{result.num_trades}")
-        table.add_row("Return", f"{result.returns:.2%}")
-
-        console.print(table)
-
-    except Exception as e:
-        error_console = Console(file=sys.stderr)
-        error_console.print(f"[bold red]Error:[/] {e}")
-        raise typer.Exit(1) from e
+    run_command(action)
 
 
 @app.command("backtest-mispricing")
 def backtest_mispricing_cli(
-    spot_file: str = typer.Option(
-        ..., help="Path to file containing spot prices (CSV or space-separated)"
-    ),
-    market_price_file: str = typer.Option(
-        ..., help="Path to file containing market option prices (CSV or space-separated)"
-    ),
-    strike: float = typer.Option(..., help="Strike price of the option"),
-    rate: float = typer.Option(..., help="Risk-free interest rate (annualized)"),
-    vol: float = typer.Option(..., help="Volatility of the underlying asset (annualized)"),
-    time: float = typer.Option(..., help="Time to expiration in years"),
-    type: str = typer.Option(..., help="Option type: 'call' or 'put'"),
-    model: str = typer.Option(
-        "black_scholes", help="Pricing model: 'black_scholes', 'binomial', or 'monte_carlo'"
-    ),
-    threshold: float = typer.Option(0.05, help="Mispricing threshold (default: 0.05 = 5%)"),
-    dividend: float = typer.Option(0.0, help="Dividend yield (annualized, default: 0.0)"),
-    cost_per_share: float = typer.Option(0.01, help="Transaction cost per share (default: $0.01)"),
-    spread_bps: float = typer.Option(5.0, help="Bid-ask spread in basis points (default: 5.0)"),
-    slippage_bps: float = typer.Option(5.0, help="Slippage in basis points (default: 5.0)"),
-    impact_factor: float = typer.Option(0.1, help="Market impact factor (default: 0.1)"),
-    simulations: int = typer.Option(
-        100000,
-        help="Number of Monte Carlo simulations (default: 100000, only for monte_carlo model)",
-    ),
-    seed: int | None = typer.Option(None, help="Random seed for Monte Carlo (optional)"),
+    spot_file: str | None = typer.Option(None, help="Spot price file (CSV, Parquet, or text)"),
+    ticker: str | None = typer.Option(None, help="Ticker symbol (alternative to --spot-file)"),
+    start: str | None = typer.Option(None, help="Start date for --ticker (YYYY-MM-DD)"),
+    end: str | None = typer.Option(None, help="End date for --ticker (YYYY-MM-DD)"),
+    period: str | None = typer.Option("3mo", help="yfinance period for --ticker"),
+    market_price_file: str = typer.Option(..., help="Market option price file"),
+    strike: float = typer.Option(..., help="Strike price"),
+    rate: float = typer.Option(..., help="Risk-free rate (annualized)"),
+    vol: float = typer.Option(..., help="Volatility (annualized)"),
+    time: float = typer.Option(..., help="Time to expiry in years"),
+    type: str = typer.Option(..., help="Option type: call or put"),
+    model: str = typer.Option("black_scholes", help="black_scholes, binomial, or monte_carlo"),
+    threshold: float = typer.Option(0.05, help="Mispricing threshold (decimal)"),
+    dividend: float = typer.Option(0.0, help="Dividend yield (annualized)"),
+    cost_per_share: float = typer.Option(0.01, help="Transaction cost per share"),
+    spread_bps: float = typer.Option(5.0, help="Bid-ask spread in basis points"),
+    slippage_bps: float = typer.Option(5.0, help="Slippage in basis points"),
+    impact_factor: float = typer.Option(0.1, help="Market impact factor"),
+    steps: int = typer.Option(100, help="Binomial steps (binomial model only)"),
+    simulations: int = typer.Option(100_000, help="Monte Carlo paths (monte_carlo model only)"),
+    seed: int | None = typer.Option(None, help="Monte Carlo seed"),
+    output_csv: str | None = typer.Option(None, help="Save equity curve to CSV"),
 ) -> None:
-    """
-    Backtest buying/selling options when they're mispriced relative to theoretical value.
+    """Backtest trading on theoretical vs market mispricing."""
 
-    Compares market prices to theoretical prices and executes trades when mispricing
-    exceeds threshold. Accounts for transaction costs and slippage.
+    def action() -> None:
+        if model not in PRICING_MODELS:
+            raise typer.BadParameter(
+                f"Model must be one of {sorted(PRICING_MODELS)}, got '{model}'"
+            )
 
-    Examples:
-        optiback backtest-mispricing --spot-file spots.csv --market-price-file prices.csv --strike 100 --rate 0.02 --vol 0.25 --time 0.25 --type call --model black_scholes
-    """
-    # Validate inputs
-    strike = validate_positive(strike, "Strike price")
-    vol = validate_non_negative(vol, "Volatility")
-    time = validate_non_negative(time, "Time to expiry")
-    type = validate_option_type(type)
-    threshold = validate_non_negative(threshold, "Threshold")
-    dividend = validate_non_negative(dividend, "Dividend yield")
-    cost_per_share = validate_non_negative(cost_per_share, "Cost per share")
-    spread_bps = validate_non_negative(spread_bps, "Spread")
-    slippage_bps = validate_non_negative(slippage_bps, "Slippage")
-    impact_factor = validate_non_negative(impact_factor, "Impact factor")
-
-    if model not in ["black_scholes", "binomial", "monte_carlo"]:
-        raise typer.BadParameter(
-            f"Model must be 'black_scholes', 'binomial', or 'monte_carlo', got '{model}'"
-        )
-
-    try:
-        # Load prices from files
-        spot_prices = load_prices_from_file(spot_file)
-        market_prices = load_prices_from_file(market_price_file)
-
+        option_type = validate_option_type(type)
+        fetch_period = period if start is None or end is None else None
+        spot_prices = resolve_spot_prices(spot_file, ticker, start, end, fetch_period, min_prices=1)
+        market_prices = load_prices_array(market_price_file)
         if len(spot_prices) != len(market_prices):
             raise typer.BadParameter("Spot prices and market prices must have the same length")
 
-        if len(spot_prices) < 1:
-            raise typer.BadParameter("Spot prices file must contain at least 1 price")
-
-        # Run backtest
         result = backtest_mispricing(
             spot_prices=spot_prices,
             market_option_prices=market_prices,
-            strike=strike,
+            strike=validate_positive(strike, "Strike price"),
             rate=rate,
-            vol=vol,
-            time_to_expiry=time,
-            option_type=type,
+            vol=validate_non_negative(vol, "Volatility"),
+            time_to_expiry=validate_non_negative(time, "Time to expiry"),
+            option_type=option_type,
             theoretical_model=model,
-            dividend_yield=dividend,
-            mispricing_threshold=threshold,
-            cost_per_share=cost_per_share,
-            bid_ask_spread_bps=spread_bps,
-            slippage_bps=slippage_bps,
-            impact_factor=impact_factor,
-            simulations=simulations,
+            dividend_yield=validate_non_negative(dividend, "Dividend yield"),
+            mispricing_threshold=validate_non_negative(threshold, "Threshold"),
+            cost_per_share=validate_non_negative(cost_per_share, "Cost per share"),
+            bid_ask_spread_bps=validate_non_negative(spread_bps, "Spread"),
+            slippage_bps=validate_non_negative(slippage_bps, "Slippage"),
+            impact_factor=validate_non_negative(impact_factor, "Impact factor"),
+            simulations=validate_simulations(simulations),
             seed=seed,
+            steps=validate_steps(steps),
         )
-
-        # Display results
-        table = Table(
+        display_backtest_result(
+            result,
             title="Mispricing Backtest Results",
-            show_header=True,
-            header_style="bold magenta",
+            extra_rows=[("Model", model.replace("_", "-").title())],
+            output_csv=output_csv,
         )
-        table.add_column("Metric", style="cyan")
-        table.add_column("Value", style="green", justify="right")
 
-        table.add_row("Strategy", result.strategy_type.replace("_", "-").title())
-        table.add_row("Model", model.replace("_", "-").title())
-        table.add_row("Initial Value", f"${result.initial_value:.2f}")
-        table.add_row("Final Value", f"${result.final_value:.2f}")
-        table.add_row("Total P&L", f"${result.total_pnl:.2f}")
-        table.add_row("Transaction Costs", f"${result.transaction_costs:.2f}")
-        table.add_row("Slippage Costs", f"${result.slippage_costs:.2f}")
-        table.add_row(
-            "Net P&L", f"${result.total_pnl - result.transaction_costs - result.slippage_costs:.2f}"
-        )
-        table.add_row("Number of Trades", f"{result.num_trades}")
-        table.add_row("Return", f"{result.returns:.2%}")
-
-        console.print(table)
-
-    except Exception as e:
-        error_console = Console(file=sys.stderr)
-        error_console.print(f"[bold red]Error:[/] {e}")
-        raise typer.Exit(1) from e
+    run_command(action)
 
 
-def main():
+def main() -> None:
     app()
 
 

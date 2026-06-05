@@ -124,7 +124,7 @@ def black_scholes_delta(
     # Return scalar if inputs were scalar
     if is_scalar:
         return float(delta.item())
-    return delta  # type: ignore[no-any-return]
+    return delta
 
 
 def black_scholes_gamma(
@@ -185,7 +185,7 @@ def black_scholes_gamma(
     # Return scalar if inputs were scalar
     if is_scalar:
         return float(gamma.item())
-    return gamma  # type: ignore[no-any-return]
+    return gamma
 
 
 def black_scholes_vega(
@@ -253,7 +253,7 @@ def black_scholes_vega(
     # Return scalar if inputs were scalar
     if is_scalar:
         return float(vega.item())
-    return vega  # type: ignore[no-any-return]
+    return vega
 
 
 def black_scholes_theta(
@@ -350,7 +350,7 @@ def black_scholes_theta(
     # Return scalar if inputs were scalar
     if is_scalar:
         return float(theta.item())
-    return theta  # type: ignore[no-any-return]
+    return theta
 
 
 def black_scholes_rho(
@@ -428,7 +428,7 @@ def black_scholes_rho(
     # Return scalar if inputs were scalar
     if is_scalar:
         return float(rho.item())
-    return rho  # type: ignore[no-any-return]
+    return rho
 
 
 def black_scholes_greeks(

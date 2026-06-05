@@ -1,6 +1,9 @@
 """Tests for backtesting functionality."""
 
+from unittest.mock import patch
+
 import numpy as np
+import pandas as pd
 import pytest
 
 from optiback.backtest.costs import (
@@ -9,8 +12,13 @@ from optiback.backtest.costs import (
     calculate_transaction_cost,
 )
 from optiback.backtest.delta_hedge import backtest_delta_hedge
-from optiback.backtest.engine import BacktestResult, calculate_sharpe_ratio
+from optiback.backtest.engine import (
+    BacktestResult,
+    calculate_sharpe_ratio,
+    rebalance_periods,
+)
 from optiback.backtest.mispricing import backtest_mispricing
+from optiback.data import fetch_spot_history
 
 
 class TestTransactionCosts:
@@ -147,6 +155,19 @@ class TestDeltaHedgeBacktest:
         """Test delta-hedge with single price raises error."""
         spot_prices = np.array([100.0])
         with pytest.raises(ValueError, match="at least 2"):
+            backtest_delta_hedge(
+                spot_prices=spot_prices,
+                strike=100.0,
+                rate=0.02,
+                vol=0.25,
+                time_to_expiry=0.25,
+                option_type="call",
+            )
+
+    def test_delta_hedge_rejects_nan_spots(self):
+        """Test delta-hedge rejects NaN spot prices."""
+        spot_prices = np.array([100.0, 101.0, np.nan, 99.0])
+        with pytest.raises(ValueError, match="must not contain NaN"):
             backtest_delta_hedge(
                 spot_prices=spot_prices,
                 strike=100.0,
@@ -405,3 +426,110 @@ class TestSharpeRatio:
         sharpe = calculate_sharpe_ratio(returns)
         # Should handle zero std dev gracefully
         assert isinstance(sharpe, float)
+
+
+class TestBacktestAnalytics:
+    """Test equity curve, period returns, and Sharpe integration."""
+
+    def test_delta_hedge_equity_curve_and_sharpe(self):
+        spot_prices = np.array([100.0, 101.0, 99.0, 102.0, 100.0])
+        result = backtest_delta_hedge(
+            spot_prices=spot_prices,
+            strike=100.0,
+            rate=0.02,
+            vol=0.25,
+            time_to_expiry=0.25,
+            option_type="call",
+        )
+
+        assert result.equity_curve is not None
+        assert len(result.equity_curve) == len(spot_prices)
+        assert result.period_returns is not None
+        assert len(result.period_returns) == len(spot_prices) - 1
+        assert result.sharpe_ratio is not None
+        assert isinstance(result.sharpe_ratio, float)
+        assert not np.isnan(result.final_value)
+        assert not np.isnan(result.transaction_costs)
+        assert not np.isnan(result.equity_curve).any()
+
+    @patch("yfinance.Ticker")
+    def test_delta_hedge_survives_trailing_nan_from_fetch(self, mock_ticker_cls):
+        """Trailing NaN bars from yfinance must not poison backtest results."""
+        mock_ticker_cls.return_value.history.return_value = pd.DataFrame(
+            {
+                "Close": [100.0, 101.0, 99.0, 102.0, 100.0, np.nan],
+            },
+            index=pd.date_range("2024-01-01", periods=6),
+        )
+        spots = fetch_spot_history("SPY", period="1mo").to_numpy(dtype=float)
+        result = backtest_delta_hedge(
+            spot_prices=spots,
+            strike=100.0,
+            rate=0.02,
+            vol=0.25,
+            time_to_expiry=0.25,
+            option_type="call",
+        )
+        assert len(spots) == 5
+        assert not np.isnan(result.final_value)
+        assert not np.isnan(result.transaction_costs)
+        assert not np.isnan(result.equity_curve).any()
+
+    def test_mispricing_equity_curve(self):
+        spot_prices = np.array([100.0, 101.0, 99.0, 102.0, 100.0])
+        market_prices = np.array([7.0, 7.5, 6.5, 8.0, 7.0])
+        result = backtest_mispricing(
+            spot_prices=spot_prices,
+            market_option_prices=market_prices,
+            strike=100.0,
+            rate=0.02,
+            vol=0.25,
+            time_to_expiry=0.25,
+            option_type="call",
+        )
+
+        assert result.equity_curve is not None
+        assert len(result.equity_curve) == len(spot_prices)
+
+    def test_weekly_rebalance_fewer_trades(self):
+        spot_prices = np.array([100.0, 101.0, 99.0, 102.0, 100.0, 98.0, 103.0])
+        daily = backtest_delta_hedge(
+            spot_prices=spot_prices,
+            strike=100.0,
+            rate=0.02,
+            vol=0.25,
+            time_to_expiry=0.25,
+            option_type="call",
+            rebalance_frequency="daily",
+        )
+        weekly = backtest_delta_hedge(
+            spot_prices=spot_prices,
+            strike=100.0,
+            rate=0.02,
+            vol=0.25,
+            time_to_expiry=0.25,
+            option_type="call",
+            rebalance_frequency="weekly",
+        )
+        assert weekly.num_trades <= daily.num_trades
+
+    def test_rebalance_periods_mapping(self):
+        assert rebalance_periods("daily") == 1
+        assert rebalance_periods("weekly") == 5
+        assert rebalance_periods("monthly") == 21
+
+    def test_mispricing_custom_binomial_steps(self):
+        spot_prices = np.array([100.0, 101.0])
+        market_prices = np.array([7.0, 7.5])
+        result = backtest_mispricing(
+            spot_prices=spot_prices,
+            market_option_prices=market_prices,
+            strike=100.0,
+            rate=0.02,
+            vol=0.25,
+            time_to_expiry=0.25,
+            option_type="call",
+            theoretical_model="binomial",
+            steps=50,
+        )
+        assert isinstance(result, BacktestResult)

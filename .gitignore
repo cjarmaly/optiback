@@ -22,8 +22,8 @@ htmlcov/
 # Linting & Formatting
 .ruff_cache/
 
-# Data & artifacts
-data/
+# Data & artifacts (root-level data folder only; not src/optiback/data/)
+/data/
 *.parquet
 *.csv
 

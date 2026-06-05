@@ -41,7 +41,7 @@ python3 --version  # Should show 3.11.x or 3.12.x
 ```bash
 # 1. Clone the repository
 git clone <repository-url>
-cd optiback-1
+cd optiback
 
 # 2. Create virtual environment with Python 3.11+
 python3.12 -m venv .venv  # Or python3.11, or python3 if it's 3.11+
@@ -116,6 +116,11 @@ pip install -e .
 - Make sure you've run `pip install -e .` or `pip install -e ".[dev]"`
 - Verify you're in the virtual environment: `which python` should show `.venv/bin/python`
 
+**`optiback: command not found`:**
+- Activate the virtual environment: `source .venv/bin/activate`
+- Reinstall in editable mode: `pip install -e ".[dev]"`
+- If the venv was created at a different path, recreate it: `rm -rf .venv && python3.12 -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]"`
+
 **Scipy/NumPy compatibility issues:**
 - The project pins numpy to `<2.3` to avoid compatibility issues
 - If you encounter errors, reinstall: `pip install "numpy>=1.26,<2.3" --upgrade`
@@ -135,6 +140,8 @@ optiback --help
 - `optiback price-montecarlo` — price European options using Monte Carlo simulation
 - `optiback greeks` — calculate all option Greeks (Delta, Gamma, Vega, Theta, Rho)
 - `optiback implied-vol` — calculate implied volatility from market prices
+- `optiback backtest-delta-hedge` — backtest a delta-hedged option position
+- `optiback backtest-mispricing` — backtest trading on theoretical vs market mispricing
 
 ### Price command
 
@@ -162,7 +169,7 @@ optiback price --spot 100 --strike 100 --rate 0.02 --vol 0.25 --time 0.5 --type 
 
 **Example output:**
 ```
-     Option Pricing Results      
+     Option Pricing Results
 ┏━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┓
 ┃ Parameter      ┃        Value ┃
 ┡━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━┩
@@ -197,7 +204,7 @@ optiback greeks --spot 100 --strike 100 --rate 0.02 --vol 0.25 --time 0.5 --type
 
 **Example output:**
 ```
-        Option Greeks          
+        Option Greeks
 ┏━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┓
 ┃ Parameter      ┃        Value ┃
 ┡━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━┩
@@ -242,7 +249,7 @@ optiback implied-vol --spot 100 --strike 100 --rate 0.02 --time 0.5 --price 7.51
 
 **Example output:**
 ```
-       Implied Volatility           
+       Implied Volatility
 ┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┓
 ┃ Parameter          ┃           Value ┃
 ┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━┩
@@ -284,8 +291,8 @@ optiback price-binomial --spot 100 --strike 100 --rate 0.02 --vol 0.25 --time 0.
 
 **Example output:**
 ```
-  Binomial Tree Option Pricing   
-             Results             
+  Binomial Tree Option Pricing
+             Results
 ┏━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┓
 ┃ Parameter      ┃        Value ┃
 ┡━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━┩
@@ -329,8 +336,8 @@ optiback price-montecarlo --spot 100 --strike 100 --rate 0.02 --vol 0.25 --time 
 
 **Example output:**
 ```
-   Monte Carlo Option Pricing    
-             Results             
+   Monte Carlo Option Pricing
+             Results
 ┏━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┓
 ┃ Parameter      ┃        Value ┃
 ┡━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━┩
@@ -347,9 +354,51 @@ optiback price-montecarlo --spot 100 --strike 100 --rate 0.02 --vol 0.25 --time 
 └────────────────┴──────────────┘
 ```
 
-### Planned CLI commands (roadmap)
+### Backtest-delta-hedge command
 
-- `optiback backtest ...` — run delta-hedge and mispricing strategies
+Backtest a delta-hedged option position with transaction costs and slippage:
+
+```bash
+# From a CSV/Parquet file
+optiback backtest-delta-hedge --spot-file prices.csv --strike 100 --rate 0.02 --vol 0.25 --time 0.25 --type call
+
+# Fetch spot history via yfinance
+optiback backtest-delta-hedge --ticker SPY --strike 450 --rate 0.04 --vol 0.20 --time 0.25 --type call
+
+# Save equity curve and use weekly rebalancing
+optiback backtest-delta-hedge --ticker SPY --strike 450 --rate 0.04 --vol 0.20 --time 0.25 --type call \
+  --rebalance-frequency weekly --output-csv equity.csv
+```
+
+**Parameters (in addition to pricing params):**
+- `--spot-file` or `--ticker` (one required): price series from file or yfinance
+- `--start` / `--end`: date range for `--ticker` (`YYYY-MM-DD`)
+- `--period`: yfinance period when dates not set (default: `3mo`)
+- `--option-position`: option size, negative = short (default: `-1.0`)
+- `--rebalance-frequency`: `daily`, `weekly`, or `monthly` (default: `daily`)
+- `--output-csv`: optional path to save equity curve
+
+**Output:** summary table with P&L, costs, trade count, and annualized Sharpe ratio. Use `--output-csv` to persist the equity curve (`equity` column).
+
+### Backtest-mispricing command
+
+Backtest buying/selling when market option prices diverge from theoretical value:
+
+```bash
+optiback backtest-mispricing --spot-file spots.csv --market-price-file prices.csv \
+  --strike 100 --rate 0.02 --vol 0.25 --time 0.25 --type call --model black_scholes
+
+optiback backtest-mispricing --ticker SPY --market-price-file prices.csv \
+  --strike 450 --rate 0.04 --vol 0.20 --time 0.25 --type call --threshold 0.05 --steps 200
+```
+
+**Parameters (in addition to pricing params):**
+- `--spot-file` or `--ticker` (one required)
+- `--market-price-file` (required): observed option prices, same length as spot series
+- `--model`: `black_scholes`, `binomial`, or `monte_carlo` (default: `black_scholes`)
+- `--threshold`: mispricing trigger as decimal (default: `0.05` = 5%)
+- `--steps`: binomial tree steps when using `--model binomial` (default: `100`)
+- `--output-csv`: optional path to save equity curve
 
 ## Python API
 
@@ -568,9 +617,86 @@ mc_prices = monte_carlo_call(
 print(mc_prices)  # Array of European option prices
 ```
 
+### Backtesting
+
+```python
+import numpy as np
+from optiback.backtest import backtest_delta_hedge, backtest_mispricing
+from optiback.data import fetch_spot_history, load_prices
+
+# Delta-hedge with file or fetched data
+spots = load_prices("prices.csv").to_numpy()
+# spots = fetch_spot_history("SPY", period="3mo").to_numpy()
+
+result = backtest_delta_hedge(
+    spot_prices=spots,
+    strike=100.0,
+    rate=0.02,
+    vol=0.25,
+    time_to_expiry=0.25,
+    option_type="call",
+    rebalance_frequency="daily",
+)
+print(result.summary())
+print(f"Sharpe: {result.sharpe_ratio:.4f}")
+print(result.equity_curve)  # portfolio value per period
+
+# Mispricing strategy
+market_prices = np.array([7.0, 7.5, 6.5, 8.0, 7.0])
+mispricing = backtest_mispricing(
+    spot_prices=spots[:5],
+    market_option_prices=market_prices,
+    strike=100.0,
+    rate=0.02,
+    vol=0.25,
+    time_to_expiry=0.25,
+    option_type="call",
+    theoretical_model="black_scholes",
+    steps=100,
+)
+```
+
 ## Data
-Data helpers will support fetching spot/vol data sources for quick experiments (e.g., `yfinance`).
-You can also bring your own data via CSV/Parquet.
+
+Load prices from CSV/Parquet or fetch spot history via yfinance:
+
+```python
+from optiback.data import fetch_spot_history, load_prices, save_prices
+
+# Load from file (auto-detects Close/price column or single-column CSV)
+series = load_prices("prices.csv")
+
+# Fetch market data
+spots = fetch_spot_history("SPY", period="3mo")
+spots = fetch_spot_history("AAPL", start="2024-01-01", end="2024-06-01")
+
+# Save for reuse
+save_prices(spots, "spy_close.parquet")
+```
+
+Missing or incomplete bars (e.g. yfinance trailing NaN on the current day) are dropped automatically. Backtests reject price series that still contain NaN after cleaning.
+
+## Project structure
+
+```
+optiback/
+├── examples/                  # End-to-end walkthrough scripts
+├── src/optiback/
+│   ├── backtest/              # Delta-hedge and mispricing engines
+│   ├── cli/                   # Typer CLI (`optiback` entrypoint)
+│   ├── data/                  # Price load/save and yfinance fetch
+│   └── pricing/               # BS, binomial, Monte Carlo, Greeks, IV
+└── tests/
+```
+
+## Examples
+
+End-to-end walkthrough (fetch or synthetic data → backtest → plot):
+
+```bash
+python examples/delta_hedge_walkthrough.py --synthetic
+python examples/delta_hedge_walkthrough.py --ticker SPY --output equity_curve.png
+```
 
 ## Development
 This repository uses `ruff`, `black`, `mypy`, and `pytest`.
@@ -603,9 +729,9 @@ pytest --cov=optiback --cov-report=term-missing
 ```
 
 ## Roadmap
-- Fast vectorized/Numba implementations for pricing and Greeks
-- Backtest modules with cost models, discrete hedging, and slippage
-- Example notebooks and docs site
+- Docs site and additional example notebooks
+- Expanded data helpers (vol surfaces, options chains)
+- Additional backtest strategies and portfolio-level analytics
 
 ## License
 MIT
